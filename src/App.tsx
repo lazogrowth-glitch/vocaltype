@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { Toaster } from "sonner";
 import { useTranslation } from "react-i18next";
 import { platform } from "@tauri-apps/plugin-os";
@@ -9,6 +9,7 @@ import {
 } from "tauri-plugin-macos-permissions-api";
 import { listen } from "@tauri-apps/api/event";
 import "./App.css";
+import { AuthPortal } from "./components/auth/AuthPortal";
 import AccessibilityPermissions from "./components/AccessibilityPermissions";
 import Footer from "./components/footer";
 import Onboarding, { AccessibilityOnboarding } from "./components/onboarding";
@@ -16,6 +17,8 @@ import { Sidebar, SidebarSection, SECTIONS_CONFIG } from "./components/Sidebar";
 import { useSettings } from "./hooks/useSettings";
 import { useSettingsStore } from "./stores/settingsStore";
 import { commands } from "@/bindings";
+import { authClient } from "@/lib/auth/client";
+import type { AuthPayload, AuthSession } from "@/lib/auth/types";
 import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
 
 type OnboardingStep = "accessibility" | "model" | "done";
@@ -28,6 +31,10 @@ const renderSettingsContent = (section: SidebarSection) => {
 
 function App() {
   const { i18n } = useTranslation();
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [onboardingStep, setOnboardingStep] = useState<OnboardingStep | null>(
     null,
   );
@@ -46,14 +53,59 @@ function App() {
   );
   const hasCompletedPostOnboardingInit = useRef(false);
 
-  useEffect(() => {
-    checkOnboardingStatus();
+  const applySession = useCallback((nextSession: AuthSession | null) => {
+    setSession(nextSession);
+    setAuthError(null);
+
+    if (nextSession) {
+      authClient.setStoredToken(nextSession.token);
+      return;
+    }
+
+    authClient.clearStoredToken();
+    setOnboardingStep(null);
+    hasCompletedPostOnboardingInit.current = false;
   }, []);
+
+  const refreshSession = useCallback(async () => {
+    const token = authClient.getStoredToken();
+
+    if (!token) {
+      applySession(null);
+      setAuthLoading(false);
+      return;
+    }
+
+    try {
+      const nextSession = await authClient.getSession(token);
+      applySession(nextSession);
+    } catch (error) {
+      console.error("Failed to refresh auth session:", error);
+      applySession(null);
+      setAuthError(
+        error instanceof Error ? error.message : "Failed to verify account",
+      );
+    } finally {
+      setAuthLoading(false);
+    }
+  }, [applySession]);
+
+  useEffect(() => {
+    refreshSession();
+  }, [refreshSession]);
 
   // Initialize RTL direction when language changes
   useEffect(() => {
     initializeRTL(i18n.language);
   }, [i18n.language]);
+
+  useEffect(() => {
+    if (authLoading || !session?.subscription.has_access) {
+      return;
+    }
+
+    checkOnboardingStatus();
+  }, [authLoading, session?.subscription.has_access]);
 
   // Initialize Enigo, shortcuts, and refresh audio devices when main app loads
   useEffect(() => {
@@ -159,7 +211,87 @@ function App() {
     setOnboardingStep("done");
   };
 
+  const authenticate = useCallback(async (
+    handler: (payload: AuthPayload) => Promise<AuthSession>,
+    payload: AuthPayload,
+  ) => {
+    setAuthSubmitting(true);
+    setAuthError(null);
+
+    try {
+      const nextSession = await handler(payload);
+      applySession(nextSession);
+    } catch (error) {
+      console.error("Authentication failed:", error);
+      setAuthError(
+        error instanceof Error ? error.message : "Authentication failed",
+      );
+    } finally {
+      setAuthSubmitting(false);
+    }
+  }, [applySession]);
+
+  const handleLogin = useCallback(
+    async (payload: AuthPayload) => {
+      await authenticate(authClient.login, payload);
+    },
+    [authenticate],
+  );
+
+  const handleRegister = useCallback(
+    async (payload: AuthPayload) => {
+      await authenticate(authClient.register, payload);
+    },
+    [authenticate],
+  );
+
+  const handleStartCheckout = useCallback(async () => {
+    const token = authClient.getStoredToken();
+    if (!token) {
+      throw new Error("You must be logged in first");
+    }
+
+    const result = await authClient.createCheckout(token);
+    return result.url;
+  }, []);
+
+  const handleOpenBillingPortal = useCallback(async () => {
+    const token = authClient.getStoredToken();
+    if (!token) {
+      throw new Error("You must be logged in first");
+    }
+
+    const result = await authClient.createPortal(token);
+    return result.url;
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    applySession(null);
+    setAuthLoading(false);
+  }, [applySession]);
+
   // Still checking onboarding status
+  if (authLoading) {
+    return null;
+  }
+
+  if (!session?.subscription.has_access) {
+    return (
+      <AuthPortal
+        error={authError}
+        isLoading={authLoading}
+        isSubmitting={authSubmitting}
+        onLogin={handleLogin}
+        onLogout={handleLogout}
+        onOpenBillingPortal={handleOpenBillingPortal}
+        onRefreshSession={refreshSession}
+        onRegister={handleRegister}
+        onStartCheckout={handleStartCheckout}
+        session={session}
+      />
+    );
+  }
+
   if (onboardingStep === null) {
     return null;
   }

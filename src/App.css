@@ -10,13 +10,13 @@
 }
 
 @theme {
-  --color-text: #0f0f0f;
-  --color-background: #fbfbfb;
-  --color-background-ui: #4a7fd4;
-  --color-logo-primary: #5b9bf5;
-  --color-logo-stroke: #1e3a5f;
-  --color-text-stroke: #f6f6f6;
-  --color-mid-gray: #808080;
+  --color-text: #f5f2ed;
+  --color-background: #0a0a0a;
+  --color-background-ui: #1a1a1a;
+  --color-logo-primary: #c9a84c;
+  --color-logo-stroke: #f0d080;
+  --color-text-stroke: #0a0a0a;
+  --color-mid-gray: #8a8a8a;
 }
 
 :root {
@@ -24,13 +24,6 @@
   font-size: 15px;
   line-height: 24px;
   font-weight: 400;
-
-  /* Colors - Light Theme */
-  /* --color-text: #0f0f0f;
-  --color-background: #fbfbfb;
-  --color-logo-primary: #5b9bf5;
-  --color-logo-stroke: #1e3a5f;
-  --color-text-stroke: #f6f6f6; */
 
   /* Typography settings */
   font-synthesis: none;
@@ -55,11 +48,10 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* Colors - Dark Theme */
-    --color-text: #fbfbfb;
-    --color-background: #2c2b29;
-    --color-logo-primary: #6aa3f7;
-    --color-logo-stroke: #b8d4fc;
+    --color-text: #f5f2ed;
+    --color-background: #0a0a0a;
+    --color-logo-primary: #c9a84c;
+    --color-logo-stroke: #f0d080;
   }
 }
 

@@ -1,3 +1,8 @@
+const WORDMARK = {
+  first: "Vocal",
+  second: "Type",
+};
+
 const ParlerTextLogo = ({
   width,
   className,
@@ -10,14 +15,18 @@ const ParlerTextLogo = ({
     <div
       className={className}
       style={{
-        fontFamily: "'Geist Pixel Circle', monospace",
+        fontFamily: "'Cabinet Grotesk', 'Geist Pixel Circle', monospace",
         fontSize: width ? width / 4.2 : 28,
-        fontWeight: "normal",
-        letterSpacing: "2px",
+        fontWeight: "900",
+        letterSpacing: "-0.5px",
         width,
+        display: "flex",
+        alignItems: "center",
+        gap: "2px",
       }}
     >
-      <span className="text-logo-primary">PARLER</span>
+      <span style={{ color: "#f5f2ed" }}>{WORDMARK.first}</span>
+      <span style={{ color: "#c9a84c" }}>{WORDMARK.second}</span>
     </div>
   );
 };
