@@ -450,6 +450,7 @@ pub fn run(cli_args: CliArgs) {
             let app_handle = app.handle().clone();
             app.manage(TranscriptionCoordinator::new(app_handle.clone()));
             app.manage(actions::ActiveActionState(std::sync::Mutex::new(None)));
+            app.manage(actions::ActiveChunkingHandle(std::sync::Mutex::new(None)));
 
             initialize_core_logic(&app_handle);
 

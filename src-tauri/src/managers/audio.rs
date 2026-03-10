@@ -513,6 +513,15 @@ impl AudioRecordingManager {
         )
     }
 
+    /// Returns a copy of all samples recorded so far without stopping the recording.
+    /// Returns None if not currently recording.
+    pub fn snapshot_recording(&self) -> Option<Vec<f32>> {
+        if !matches!(*self.state.lock().unwrap(), RecordingState::Recording { .. }) {
+            return None;
+        }
+        self.recorder.lock().unwrap().as_ref()?.snapshot().ok()
+    }
+
     /// Cancel any ongoing recording without returning audio samples
     pub fn cancel_recording(&self) {
         self.is_paused.store(false, Ordering::Relaxed);
