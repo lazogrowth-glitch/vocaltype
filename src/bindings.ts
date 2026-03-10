@@ -495,7 +495,22 @@ async openAppDataDir() : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async exportSettings(path: string) : Promise<Result<null, string>> {    try {    return { status: "ok", data: await TAURI_INVOKE("export_settings", { path }) };} catch (e) {    if(e instanceof Error) throw e;    else return { status: "error", error: e  as any };}},async importSettings(path: string) : Promise<Result<null, string>> {    try {    return { status: "ok", data: await TAURI_INVOKE("import_settings", { path }) };} catch (e) {    if(e instanceof Error) throw e;    else return { status: "error", error: e  as any };}},
+async exportSettings(path: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("export_settings", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async importSettings(path: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("import_settings", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 /**
  * Check if Apple Intelligence is available on this device.
  * Called by the frontend when the user selects Apple Intelligence provider.
@@ -797,10 +812,8 @@ async changeGeminiModelSetting(model: string) : Promise<Result<null, string>> {
 }
 },
 /**
- * Checks if the Mac is a laptop by detecting battery presence
- * 
- * This uses pmset to check for battery information.
- * Returns true if a battery is detected (laptop), false otherwise (desktop)
+ * Stub implementation for non-macOS platforms
+ * Always returns false since laptop detection is macOS-specific
  */
 async isLaptop() : Promise<Result<boolean, string>> {
     try {
