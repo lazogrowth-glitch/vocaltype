@@ -418,7 +418,7 @@ fn default_update_checks_enabled() -> bool {
 }
 
 fn default_selected_language() -> String {
-    "auto".to_string()
+    preferred_transcription_language_from_locale(&default_app_language())
 }
 
 fn default_overlay_position() -> OverlayPosition {
@@ -472,6 +472,16 @@ fn default_app_language() -> String {
     tauri_plugin_os::locale()
         .map(|l| l.replace('_', "-"))
         .unwrap_or_else(|| "en".to_string())
+}
+
+fn preferred_transcription_language_from_locale(locale: &str) -> String {
+    let base_language = locale.split('-').next().unwrap_or("en");
+
+    match base_language {
+        "fr" | "es" | "de" | "it" | "pt" | "ja" | "ko" | "zh" | "ru" | "uk" | "pl" | "tr"
+        | "vi" | "ar" | "cs" => base_language.to_string(),
+        _ => "auto".to_string(),
+    }
 }
 
 fn default_show_tray_icon() -> bool {
@@ -674,6 +684,20 @@ fn ensure_post_process_defaults(settings: &mut AppSettings) -> bool {
     changed
 }
 
+fn ensure_selected_language_default(settings: &mut AppSettings) -> bool {
+    if settings.selected_language != "auto" || settings.translate_to_english {
+        return false;
+    }
+
+    let preferred_language = preferred_transcription_language_from_locale(&settings.app_language);
+    if preferred_language == "auto" {
+        return false;
+    }
+
+    settings.selected_language = preferred_language;
+    true
+}
+
 pub const SETTINGS_STORE_PATH: &str = "settings_store.json";
 
 pub fn get_default_settings() -> AppSettings {
@@ -760,7 +784,7 @@ pub fn get_default_settings() -> AppSettings {
 
     AppSettings {
         bindings,
-        push_to_talk: true,
+        push_to_talk: false,
         audio_feedback: false,
         audio_feedback_volume: default_audio_feedback_volume(),
         sound_theme: default_sound_theme(),
@@ -773,7 +797,7 @@ pub fn get_default_settings() -> AppSettings {
         clamshell_microphone: None,
         selected_output_device: None,
         translate_to_english: false,
-        selected_language: "auto".to_string(),
+        selected_language: default_selected_language(),
         overlay_position: default_overlay_position(),
         debug_mode: false,
         log_level: default_log_level(),
@@ -878,7 +902,9 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
         default_settings
     };
 
-    if ensure_post_process_defaults(&mut settings) {
+    let post_process_changed = ensure_post_process_defaults(&mut settings);
+    let language_changed = ensure_selected_language_default(&mut settings);
+    if post_process_changed || language_changed {
         store.set("settings", serde_json::to_value(&settings).unwrap());
     }
 
@@ -902,7 +928,9 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
         default_settings
     };
 
-    if ensure_post_process_defaults(&mut settings) {
+    let post_process_changed = ensure_post_process_defaults(&mut settings);
+    let language_changed = ensure_selected_language_default(&mut settings);
+    if post_process_changed || language_changed {
         store.set("settings", serde_json::to_value(&settings).unwrap());
     }
 

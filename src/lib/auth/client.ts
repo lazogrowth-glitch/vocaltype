@@ -2,15 +2,23 @@ import type {
   AuthPayload,
   AuthSession,
   BillingLinkResponse,
+  ChangePasswordPayload,
+  ResetPasswordPayload,
 } from "./types";
 import { load } from "@tauri-apps/plugin-store";
 
 const AUTH_TOKEN_KEY = "vocaltype.auth.token";
 const AUTH_SESSION_KEY = "vocaltype.auth.session";
+const DEVICE_ID_KEY = "vocaltype.device.id";
+const DEVICE_REGISTERED_KEY = "vocaltype.device.registered";
+// Stores the set of emails that have already been registered on this device.
+const REGISTERED_EMAILS_KEY = "vocaltype.device.registered_emails";
 const AUTH_STORE_FILE = "auth.store.json";
 
 let cachedToken: string | null = null;
 let cachedSession: AuthSession | null = null;
+let cachedDeviceId: string | null = null;
+let cachedRegisteredEmails: string[] | null = null;
 let hasHydratedToken = false;
 let storePromise: ReturnType<typeof load> | null = null;
 
@@ -119,6 +127,106 @@ async function request<T>(
 
 export const authClient = {
   tokenKey: AUTH_TOKEN_KEY,
+
+  // ─── Device ID ──────────────────────────────────────────────────────────────
+
+  async getOrCreateDeviceId(): Promise<string> {
+    if (cachedDeviceId) return cachedDeviceId;
+
+    try {
+      const store = await getAuthStore();
+      const stored = await store.get<string>(DEVICE_ID_KEY);
+      if (typeof stored === "string" && stored.trim()) {
+        cachedDeviceId = stored;
+        return cachedDeviceId;
+      }
+    } catch {
+      // fall through to generate
+    }
+
+    // Generate a new UUID for this device and persist it
+    const newId = crypto.randomUUID();
+    cachedDeviceId = newId;
+
+    try {
+      const store = await getAuthStore();
+      await store.set(DEVICE_ID_KEY, newId);
+      await store.save();
+    } catch (error) {
+      console.warn("Failed to persist device ID:", error);
+    }
+
+    return newId;
+  },
+
+  async isDeviceRegistered(): Promise<boolean> {
+    try {
+      const store = await getAuthStore();
+      const registered = await store.get<boolean>(DEVICE_REGISTERED_KEY);
+      return registered === true;
+    } catch {
+      return false;
+    }
+  },
+
+  async markDeviceRegistered(): Promise<void> {
+    try {
+      const store = await getAuthStore();
+      await store.set(DEVICE_REGISTERED_KEY, true);
+      await store.save();
+    } catch (error) {
+      console.warn("Failed to mark device as registered:", error);
+    }
+  },
+
+  async clearDeviceRegistration(): Promise<void> {
+    try {
+      const store = await getAuthStore();
+      await store.delete(DEVICE_REGISTERED_KEY);
+      await store.save();
+    } catch (error) {
+      console.warn("Failed to clear device registration:", error);
+    }
+  },
+
+  /** Returns the list of emails already registered on this device. */
+  async getRegisteredEmails(): Promise<string[]> {
+    if (cachedRegisteredEmails !== null) return cachedRegisteredEmails;
+    try {
+      const store = await getAuthStore();
+      const stored = await store.get<string[]>(REGISTERED_EMAILS_KEY);
+      cachedRegisteredEmails = Array.isArray(stored) ? stored : [];
+    } catch {
+      cachedRegisteredEmails = [];
+    }
+    return cachedRegisteredEmails;
+  },
+
+  /** Returns true if this exact email was used to register on this device before. */
+  async isEmailRegisteredOnDevice(email: string): Promise<boolean> {
+    const emails = await authClient.getRegisteredEmails();
+    return emails.includes(email.trim().toLowerCase());
+  },
+
+  /** Saves an email to the device's registered email list. */
+  async addRegisteredEmail(email: string): Promise<void> {
+    const normalized = email.trim().toLowerCase();
+    const emails = await authClient.getRegisteredEmails();
+    if (!emails.includes(normalized)) {
+      const updated = [...emails, normalized];
+      cachedRegisteredEmails = updated;
+      try {
+        const store = await getAuthStore();
+        await store.set(REGISTERED_EMAILS_KEY, updated);
+        await store.save();
+      } catch (error) {
+        console.warn("Failed to persist registered emails:", error);
+      }
+    }
+  },
+
+  // ─── Token & Session ────────────────────────────────────────────────────────
+
   async hydrateStoredToken() {
     if (hasHydratedToken) {
       return cachedToken;
@@ -149,6 +257,7 @@ export const authClient = {
     hasHydratedToken = true;
     return cachedToken;
   },
+
   async hydrateStoredSession() {
     await this.hydrateStoredToken();
 
@@ -176,12 +285,15 @@ export const authClient = {
 
     return cachedSession;
   },
+
   getStoredToken() {
     return cachedToken ?? readLocalToken();
   },
+
   getStoredSession() {
     return cachedSession ?? readLocalSession();
   },
+
   async setStoredSession(session: AuthSession) {
     cachedSession = session;
     await this.setStoredToken(session.token);
@@ -195,6 +307,7 @@ export const authClient = {
       console.warn("Failed to persist auth session:", error);
     }
   },
+
   async setStoredToken(token: string) {
     cachedToken = token;
     hasHydratedToken = true;
@@ -208,6 +321,7 @@ export const authClient = {
       console.warn("Failed to persist auth token:", error);
     }
   },
+
   async clearStoredSession() {
     cachedSession = null;
     writeLocalSession(null);
@@ -221,6 +335,7 @@ export const authClient = {
       console.warn("Failed to clear persisted auth session:", error);
     }
   },
+
   async clearStoredToken() {
     cachedToken = null;
     hasHydratedToken = true;
@@ -234,32 +349,54 @@ export const authClient = {
       console.warn("Failed to clear persisted auth token:", error);
     }
   },
+
   getErrorStatus(error: unknown) {
     return error instanceof AuthApiError ? error.status : null;
   },
+
+  // ─── API Calls ──────────────────────────────────────────────────────────────
+
   async login(payload: AuthPayload) {
+    const device_id = await authClient.getOrCreateDeviceId();
     return request<AuthSession>(
       "/auth/login",
       {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, device_id }),
       },
       undefined,
     );
   },
+
   async register(payload: AuthPayload) {
-    return request<AuthSession>(
+    const device_id = await authClient.getOrCreateDeviceId();
+    const session = await request<AuthSession>(
       "/auth/register",
       {
         method: "POST",
-        body: JSON.stringify(payload),
+        body: JSON.stringify({ ...payload, device_id }),
       },
       undefined,
     );
+    // After a successful registration, remember this device and email locally
+    await authClient.markDeviceRegistered();
+    await authClient.addRegisteredEmail(payload.email);
+    return session;
   },
+
   async getSession(token: string) {
-    return request<AuthSession>("/auth/session", { method: "GET" }, token);
+    const session = await request<AuthSession>(
+      "/auth/session",
+      { method: "GET" },
+      token,
+    );
+    // If the backend returns a refreshed token, persist it automatically
+    if (session.token && session.token !== token) {
+      await authClient.setStoredToken(session.token);
+    }
+    return session;
   },
+
   async createCheckout(token: string) {
     return request<BillingLinkResponse>(
       "/billing/checkout",
@@ -267,10 +404,53 @@ export const authClient = {
       token,
     );
   },
+
   async createPortal(token: string) {
     return request<BillingLinkResponse>(
       "/billing/portal",
       { method: "POST" },
+      token,
+    );
+  },
+
+  async forgotPassword(email: string): Promise<void> {
+    await request<{ ok: boolean }>(
+      "/auth/forgot-password",
+      {
+        method: "POST",
+        body: JSON.stringify({ email }),
+      },
+    );
+  },
+
+  async verifyResetCode(email: string, code: string): Promise<boolean> {
+    const result = await request<{ valid: boolean }>(
+      "/auth/verify-reset-code",
+      {
+        method: "POST",
+        body: JSON.stringify({ email, code }),
+      },
+    );
+    return result.valid;
+  },
+
+  async resetPassword(payload: ResetPasswordPayload): Promise<AuthSession> {
+    return request<AuthSession>(
+      "/auth/reset-password",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  async changePassword(token: string, payload: ChangePasswordPayload): Promise<void> {
+    await request<{ ok: boolean }>(
+      "/auth/change-password",
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
+      },
       token,
     );
   },

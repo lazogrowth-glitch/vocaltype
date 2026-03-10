@@ -29,8 +29,20 @@ export interface AuthPayload {
   email: string;
   password: string;
   name?: string;
+  device_id?: string;
 }
 
 export interface BillingLinkResponse {
   url: string;
+}
+
+export interface ResetPasswordPayload {
+  email: string;
+  code: string;
+  new_password: string;
+}
+
+export interface ChangePasswordPayload {
+  old_password: string;
+  new_password: string;
 }

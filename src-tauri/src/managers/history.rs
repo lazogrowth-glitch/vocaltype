@@ -11,6 +11,8 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio_toolkit::save_wav_file;
 
+const RECORDING_FILE_PREFIX: &str = "vocaltype";
+
 /// Database migrations for transcription history.
 /// Each migration is applied in order. The library tracks which migrations
 /// have been applied using SQLite's user_version pragma.
@@ -191,7 +193,7 @@ impl HistoryManager {
         model_name: Option<String>,
     ) -> Result<()> {
         let timestamp = Utc::now().timestamp();
-        let file_name = format!("handy-{}.wav", timestamp);
+        let file_name = format!("{}-{}.wav", RECORDING_FILE_PREFIX, timestamp);
         let title = self.format_timestamp_title(timestamp);
 
         // Save WAV file
@@ -581,7 +583,7 @@ mod tests {
             "INSERT INTO transcription_history (file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key)
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
-                format!("handy-{}.wav", timestamp),
+                format!("{}-{}.wav", RECORDING_FILE_PREFIX, timestamp),
                 timestamp,
                 false,
                 format!("Recording {}", timestamp),

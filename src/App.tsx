@@ -30,7 +30,7 @@ const renderSettingsContent = (section: SidebarSection) => {
 };
 
 function App() {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation();
   const [authLoading, setAuthLoading] = useState(true);
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -90,24 +90,43 @@ function App() {
 
       if (status === 401 || status === 403) {
         applySession(null);
-        setAuthError(
-          error instanceof Error ? error.message : "Failed to verify account",
-        );
+        setAuthError(t("auth.sessionExpired"));
       } else {
-        setAuthError(
-          error instanceof Error
-            ? error.message
-            : "Failed to refresh account state",
-        );
+        // Network error or server unavailable — keep cached session silently
+        // so the user can still use the app if they were previously authenticated.
+        if (!persistedSession) {
+          setAuthError(
+            error instanceof Error
+              ? error.message
+              : t("auth.errors.networkError"),
+          );
+        }
       }
     } finally {
       setAuthLoading(false);
     }
-  }, [applySession]);
+  }, [applySession, t]);
 
   useEffect(() => {
     refreshSession();
   }, [refreshSession]);
+
+  // Refresh session every 30 minutes while the app is open to keep the token alive.
+  // If the backend issues a new token on each getSession call, this extends the lifetime.
+  useEffect(() => {
+    const THIRTY_MINUTES = 30 * 60 * 1000;
+    const interval = setInterval(() => {
+      const token = authClient.getStoredToken();
+      if (!token) return;
+      authClient
+        .getSession(token)
+        .then((nextSession) => applySession(nextSession))
+        .catch(() => {
+          // Silently ignore refresh errors — the next app start will handle it
+        });
+    }, THIRTY_MINUTES);
+    return () => clearInterval(interval);
+  }, [applySession]);
 
   // Initialize RTL direction when language changes
   useEffect(() => {
