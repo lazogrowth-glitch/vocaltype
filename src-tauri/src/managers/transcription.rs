@@ -3,6 +3,7 @@ use crate::managers::model::{EngineType, ModelManager};
 use crate::settings::{get_settings, ModelUnloadTimeout};
 use anyhow::Result;
 use log::{debug, error, info, warn};
+use parakeet_rs::{ParakeetTDT, TimestampMode as ParakeetTimestampMode, Transcriber};
 use serde::Serialize;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -17,7 +18,8 @@ use transcribe_rs::{
             StreamingModelParams,
         },
         parakeet::{
-            ParakeetEngine, ParakeetInferenceParams, ParakeetModelParams, TimestampGranularity,
+            ParakeetEngine as TranscribeParakeetEngine, ParakeetInferenceParams,
+            ParakeetModelParams, TimestampGranularity,
         },
         sense_voice::{
             Language as SenseVoiceLanguage, SenseVoiceEngine, SenseVoiceInferenceParams,
@@ -38,7 +40,8 @@ pub struct ModelStateEvent {
 
 enum LoadedEngine {
     Whisper(WhisperEngine),
-    Parakeet(ParakeetEngine),
+    Parakeet(TranscribeParakeetEngine),
+    ParakeetV3(ParakeetTDT),
     Moonshine(MoonshineEngine),
     MoonshineStreaming(MoonshineStreamingEngine),
     SenseVoice(SenseVoiceEngine),
@@ -163,6 +166,7 @@ impl TranscriptionManager {
                 match loaded_engine {
                     LoadedEngine::Whisper(ref mut e) => e.unload_model(),
                     LoadedEngine::Parakeet(ref mut e) => e.unload_model(),
+                    LoadedEngine::ParakeetV3(_) => {}
                     LoadedEngine::Moonshine(ref mut e) => e.unload_model(),
                     LoadedEngine::MoonshineStreaming(ref mut e) => e.unload_model(),
                     LoadedEngine::SenseVoice(ref mut e) => e.unload_model(),
@@ -268,12 +272,10 @@ impl TranscriptionManager {
                 LoadedEngine::Whisper(engine)
             }
             EngineType::Parakeet => {
-                let mut engine = ParakeetEngine::new();
-                engine
-                    .load_model_with_params(&model_path, ParakeetModelParams::int8())
-                    .map_err(|e| {
+                if model_id == "parakeet-tdt-0.6b-v3" {
+                    let engine = ParakeetTDT::from_pretrained(&model_path, None).map_err(|e| {
                         let error_msg =
-                            format!("Failed to load parakeet model {}: {}", model_id, e);
+                            format!("Failed to load Parakeet V3 model {}: {}", model_id, e);
                         let _ = self.app_handle.emit(
                             "model-state-changed",
                             ModelStateEvent {
@@ -285,7 +287,27 @@ impl TranscriptionManager {
                         );
                         anyhow::anyhow!(error_msg)
                     })?;
-                LoadedEngine::Parakeet(engine)
+                    LoadedEngine::ParakeetV3(engine)
+                } else {
+                    let mut engine = TranscribeParakeetEngine::new();
+                    engine
+                        .load_model_with_params(&model_path, ParakeetModelParams::int8())
+                        .map_err(|e| {
+                            let error_msg =
+                                format!("Failed to load parakeet model {}: {}", model_id, e);
+                            let _ = self.app_handle.emit(
+                                "model-state-changed",
+                                ModelStateEvent {
+                                    event_type: "loading_failed".to_string(),
+                                    model_id: Some(model_id.to_string()),
+                                    model_name: Some(model_info.name.clone()),
+                                    error: Some(error_msg.clone()),
+                                },
+                            );
+                            anyhow::anyhow!(error_msg)
+                        })?;
+                    LoadedEngine::Parakeet(engine)
+                }
             }
             EngineType::Moonshine => {
                 let mut engine = MoonshineEngine::new();
@@ -539,77 +561,85 @@ impl TranscriptionManager {
             // Release the lock before transcribing — no mutex held during the engine call
             drop(engine_guard);
 
-            let transcribe_result = catch_unwind(AssertUnwindSafe(
-                || -> Result<transcribe_rs::TranscriptionResult> {
-                    match &mut engine {
-                        LoadedEngine::Whisper(whisper_engine) => {
-                            let whisper_language = if settings.selected_language == "auto" {
-                                None
+            let transcribe_result = catch_unwind(AssertUnwindSafe(|| -> Result<String> {
+                match &mut engine {
+                    LoadedEngine::Whisper(whisper_engine) => {
+                        let whisper_language = if settings.selected_language == "auto" {
+                            None
+                        } else {
+                            let normalized = if settings.selected_language == "zh-Hans"
+                                || settings.selected_language == "zh-Hant"
+                            {
+                                "zh".to_string()
                             } else {
-                                let normalized = if settings.selected_language == "zh-Hans"
-                                    || settings.selected_language == "zh-Hant"
-                                {
-                                    "zh".to_string()
-                                } else {
-                                    settings.selected_language.clone()
-                                };
-                                Some(normalized)
+                                settings.selected_language.clone()
                             };
+                            Some(normalized)
+                        };
 
-                            let params = WhisperInferenceParams {
-                                language: whisper_language,
-                                translate: settings.translate_to_english,
-                                ..Default::default()
-                            };
+                        let params = WhisperInferenceParams {
+                            language: whisper_language,
+                            translate: settings.translate_to_english,
+                            ..Default::default()
+                        };
 
-                            whisper_engine
-                                .transcribe_samples(audio, Some(params))
-                                .map_err(|e| anyhow::anyhow!("Whisper transcription failed: {}", e))
-                        }
-                        LoadedEngine::Parakeet(parakeet_engine) => {
-                            let params = ParakeetInferenceParams {
-                                timestamp_granularity: TimestampGranularity::Segment,
-                                ..Default::default()
-                            };
-                            parakeet_engine
-                                .transcribe_samples(audio, Some(params))
-                                .map_err(|e| {
-                                    anyhow::anyhow!("Parakeet transcription failed: {}", e)
-                                })
-                        }
-                        LoadedEngine::Moonshine(moonshine_engine) => moonshine_engine
-                            .transcribe_samples(audio, None)
-                            .map_err(|e| anyhow::anyhow!("Moonshine transcription failed: {}", e)),
-                        LoadedEngine::MoonshineStreaming(streaming_engine) => streaming_engine
-                            .transcribe_samples(audio, None)
-                            .map_err(|e| {
-                                anyhow::anyhow!("Moonshine streaming transcription failed: {}", e)
-                            }),
-                        LoadedEngine::SenseVoice(sense_voice_engine) => {
-                            let language = match settings.selected_language.as_str() {
-                                "zh" | "zh-Hans" | "zh-Hant" => SenseVoiceLanguage::Chinese,
-                                "en" => SenseVoiceLanguage::English,
-                                "ja" => SenseVoiceLanguage::Japanese,
-                                "ko" => SenseVoiceLanguage::Korean,
-                                "yue" => SenseVoiceLanguage::Cantonese,
-                                _ => SenseVoiceLanguage::Auto,
-                            };
-                            let params = SenseVoiceInferenceParams {
-                                language,
-                                use_itn: true,
-                            };
-                            sense_voice_engine
-                                .transcribe_samples(audio, Some(params))
-                                .map_err(|e| {
-                                    anyhow::anyhow!("SenseVoice transcription failed: {}", e)
-                                })
-                        }
-                        LoadedEngine::GeminiApi => {
-                            unreachable!("GeminiApi handled before catch_unwind")
-                        }
+                        whisper_engine
+                            .transcribe_samples(audio, Some(params))
+                            .map(|result| result.text)
+                            .map_err(|e| anyhow::anyhow!("Whisper transcription failed: {}", e))
                     }
-                },
-            ));
+                    LoadedEngine::Parakeet(parakeet_engine) => {
+                        let params = ParakeetInferenceParams {
+                            timestamp_granularity: TimestampGranularity::Segment,
+                            ..Default::default()
+                        };
+                        parakeet_engine
+                            .transcribe_samples(audio, Some(params))
+                            .map(|result| result.text)
+                            .map_err(|e| anyhow::anyhow!("Parakeet transcription failed: {}", e))
+                    }
+                    LoadedEngine::ParakeetV3(parakeet_engine) => parakeet_engine
+                        .transcribe_samples(
+                            audio,
+                            16_000,
+                            1,
+                            Some(ParakeetTimestampMode::Sentences),
+                        )
+                        .map(|result| result.text)
+                        .map_err(|e| anyhow::anyhow!("Parakeet V3 transcription failed: {}", e)),
+                    LoadedEngine::Moonshine(moonshine_engine) => moonshine_engine
+                        .transcribe_samples(audio, None)
+                        .map(|result| result.text)
+                        .map_err(|e| anyhow::anyhow!("Moonshine transcription failed: {}", e)),
+                    LoadedEngine::MoonshineStreaming(streaming_engine) => streaming_engine
+                        .transcribe_samples(audio, None)
+                        .map(|result| result.text)
+                        .map_err(|e| {
+                            anyhow::anyhow!("Moonshine streaming transcription failed: {}", e)
+                        }),
+                    LoadedEngine::SenseVoice(sense_voice_engine) => {
+                        let language = match settings.selected_language.as_str() {
+                            "zh" | "zh-Hans" | "zh-Hant" => SenseVoiceLanguage::Chinese,
+                            "en" => SenseVoiceLanguage::English,
+                            "ja" => SenseVoiceLanguage::Japanese,
+                            "ko" => SenseVoiceLanguage::Korean,
+                            "yue" => SenseVoiceLanguage::Cantonese,
+                            _ => SenseVoiceLanguage::Auto,
+                        };
+                        let params = SenseVoiceInferenceParams {
+                            language,
+                            use_itn: true,
+                        };
+                        sense_voice_engine
+                            .transcribe_samples(audio, Some(params))
+                            .map(|result| result.text)
+                            .map_err(|e| anyhow::anyhow!("SenseVoice transcription failed: {}", e))
+                    }
+                    LoadedEngine::GeminiApi => {
+                        unreachable!("GeminiApi handled before catch_unwind")
+                    }
+                }
+            }));
 
             match transcribe_result {
                 Ok(inner_result) => {
@@ -663,12 +693,12 @@ impl TranscriptionManager {
         // Apply word correction if custom words are configured
         let corrected_result = if !settings.custom_words.is_empty() {
             apply_custom_words(
-                &result.text,
+                &result,
                 &settings.custom_words,
                 settings.word_correction_threshold,
             )
         } else {
-            result.text
+            result
         };
 
         // Filter out filler words and hallucinations

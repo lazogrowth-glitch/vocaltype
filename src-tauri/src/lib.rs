@@ -109,7 +109,7 @@ pub(crate) fn show_main_window(app: &AppHandle) {
     }
 }
 
-fn initialize_core_logic(app_handle: &AppHandle) {
+fn initialize_core_logic(app_handle: &AppHandle) -> Result<(), String> {
     // Note: Enigo (keyboard/mouse simulation) is NOT initialized here.
     // The frontend is responsible for calling the `initialize_enigo` command
     // after onboarding completes. This avoids triggering permission dialogs
@@ -117,16 +117,21 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 
     // Initialize the managers
     let recording_manager = Arc::new(
-        AudioRecordingManager::new(app_handle).expect("Failed to initialize recording manager"),
+        AudioRecordingManager::new(app_handle)
+            .map_err(|err| format!("Failed to initialize recording manager: {}", err))?,
     );
-    let model_manager =
-        Arc::new(ModelManager::new(app_handle).expect("Failed to initialize model manager"));
+    let model_manager = Arc::new(
+        ModelManager::new(app_handle)
+            .map_err(|err| format!("Failed to initialize model manager: {}", err))?,
+    );
     let transcription_manager = Arc::new(
         TranscriptionManager::new(app_handle, model_manager.clone())
-            .expect("Failed to initialize transcription manager"),
+            .map_err(|err| format!("Failed to initialize transcription manager: {}", err))?,
     );
-    let history_manager =
-        Arc::new(HistoryManager::new(app_handle).expect("Failed to initialize history manager"));
+    let history_manager = Arc::new(
+        HistoryManager::new(app_handle)
+            .map_err(|err| format!("Failed to initialize history manager: {}", err))?,
+    );
 
     // Add managers to Tauri's managed state
     app_handle.manage(recording_manager.clone());
@@ -140,10 +145,14 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // This matches the pattern used for Enigo initialization.
 
     #[cfg(unix)]
-    let signals = Signals::new(&[SIGUSR1, SIGUSR2]).unwrap();
-    // Set up signal handlers for toggling transcription
-    #[cfg(unix)]
-    signal_handle::setup_signal_handler(app_handle.clone(), signals);
+    match Signals::new(&[SIGUSR1, SIGUSR2]) {
+        Ok(signals) => {
+            signal_handle::setup_signal_handler(app_handle.clone(), signals);
+        }
+        Err(err) => {
+            log::error!("Failed to initialize Unix signal handlers: {}", err);
+        }
+    }
 
     // Apply macOS Accessory policy if starting hidden and tray is available.
     // If the tray icon is disabled, keep the dock icon so the user can reopen.
@@ -160,60 +169,73 @@ fn initialize_core_logic(app_handle: &AppHandle) {
     // Choose the appropriate initial icon based on theme
     let initial_icon_path = tray::get_icon_path(initial_theme, tray::TrayIconState::Idle);
 
-    let tray = TrayIconBuilder::new()
-        .icon(
-            Image::from_path(
-                app_handle
-                    .path()
-                    .resolve(initial_icon_path, tauri::path::BaseDirectory::Resource)
-                    .unwrap(),
+    let tray_icon_result = app_handle
+        .path()
+        .resolve(initial_icon_path, tauri::path::BaseDirectory::Resource)
+        .map_err(|err| {
+            format!(
+                "Failed to resolve tray icon '{}': {}",
+                initial_icon_path, err
             )
-            .unwrap(),
-        )
-        .show_menu_on_left_click(true)
-        .icon_as_template(true)
-        .on_menu_event(|app, event| match event.id.as_ref() {
-            "settings" => {
-                show_main_window(app);
-            }
-            "check_updates" => {
-                let settings = settings::get_settings(app);
-                if settings.update_checks_enabled {
-                    show_main_window(app);
-                    let _ = app.emit("check-for-updates", ());
-                }
-            }
-            "copy_last_transcript" => {
-                tray::copy_last_transcript(app);
-            }
-            "unload_model" => {
-                let transcription_manager = app.state::<Arc<TranscriptionManager>>();
-                if !transcription_manager.is_model_loaded() {
-                    log::warn!("No model is currently loaded.");
-                    return;
-                }
-                match transcription_manager.unload_model() {
-                    Ok(()) => log::info!("Model unloaded via tray."),
-                    Err(e) => log::error!("Failed to unload model via tray: {}", e),
-                }
-            }
-            "cancel" => {
-                use crate::utils::cancel_current_operation;
-
-                // Use centralized cancellation that handles all operations
-                cancel_current_operation(app);
-            }
-            "quit" => {
-                app.exit(0);
-            }
-            _ => {}
         })
-        .build(app_handle)
-        .unwrap();
-    app_handle.manage(tray);
+        .and_then(|path| {
+            Image::from_path(path)
+                .map_err(|err| format!("Failed to load tray icon '{}': {}", initial_icon_path, err))
+        });
 
-    // Initialize tray menu with idle state
-    utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle, None);
+    match tray_icon_result {
+        Ok(icon) => {
+            let tray = TrayIconBuilder::new()
+                .icon(icon)
+                .show_menu_on_left_click(true)
+                .icon_as_template(true)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "settings" => {
+                        show_main_window(app);
+                    }
+                    "check_updates" => {
+                        let settings = settings::get_settings(app);
+                        if settings.update_checks_enabled {
+                            show_main_window(app);
+                            let _ = app.emit("check-for-updates", ());
+                        }
+                    }
+                    "copy_last_transcript" => {
+                        tray::copy_last_transcript(app);
+                    }
+                    "unload_model" => {
+                        let transcription_manager = app.state::<Arc<TranscriptionManager>>();
+                        if !transcription_manager.is_model_loaded() {
+                            log::warn!("No model is currently loaded.");
+                            return;
+                        }
+                        match transcription_manager.unload_model() {
+                            Ok(()) => log::info!("Model unloaded via tray."),
+                            Err(e) => log::error!("Failed to unload model via tray: {}", e),
+                        }
+                    }
+                    "cancel" => {
+                        use crate::utils::cancel_current_operation;
+
+                        // Use centralized cancellation that handles all operations
+                        cancel_current_operation(app);
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .build(app_handle)
+                .map_err(|err| format!("Failed to build tray icon: {}", err))?;
+            app_handle.manage(tray);
+
+            // Initialize tray menu with idle state
+            utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle, None);
+        }
+        Err(err) => {
+            log::error!("{}", err);
+        }
+    }
 
     // Apply show_tray_icon setting and cache it in the atomic flag
     let settings = settings::get_settings(app_handle);
@@ -242,6 +264,8 @@ fn initialize_core_logic(app_handle: &AppHandle) {
 
     // Create the recording overlay window (hidden by default)
     utils::create_recording_overlay(app_handle);
+
+    Ok(())
 }
 
 #[tauri::command]
@@ -374,7 +398,7 @@ pub fn run(cli_args: CliArgs) {
             Typescript::default().bigint(BigIntExportBehavior::Number),
             "../src/bindings.ts",
         )
-        .expect("Failed to export typescript bindings");
+        .unwrap_or_else(|err| eprintln!("Failed to export typescript bindings: {}", err));
 
     let builder = tauri::Builder::default()
         .device_event_filter(tauri::DeviceEventFilter::Always)
@@ -408,7 +432,7 @@ pub fn run(cli_args: CliArgs) {
         builder = builder.plugin(tauri_nspanel::init());
     }
 
-    builder
+    let app = builder
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             if args.iter().any(|a| a == "--toggle-transcription") {
                 signal_handle::send_transcription_input(app, "transcribe", "CLI");
@@ -452,7 +476,7 @@ pub fn run(cli_args: CliArgs) {
             app.manage(actions::ActiveActionState(std::sync::Mutex::new(None)));
             app.manage(actions::ActiveChunkingHandle(std::sync::Mutex::new(None)));
 
-            initialize_core_logic(&app_handle);
+            initialize_core_logic(&app_handle)?;
 
             // Hide tray icon if --no-tray was passed
             if cli_args.no_tray {
@@ -508,13 +532,21 @@ pub fn run(cli_args: CliArgs) {
             _ => {}
         })
         .invoke_handler(specta_builder.invoke_handler())
-        .build(tauri::generate_context!())
-        .expect("error while building tauri application")
-        .run(|app, event| {
-            #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { .. } = &event {
-                show_main_window(app);
-            }
-            let _ = (app, event); // suppress unused warnings on non-macOS
-        });
+        .build(tauri::generate_context!());
+
+    let app = match app {
+        Ok(app) => app,
+        Err(err) => {
+            log::error!("Error while building Tauri application: {}", err);
+            return;
+        }
+    };
+
+    app.run(|app, event| {
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = &event {
+            show_main_window(app);
+        }
+        let _ = (app, event); // suppress unused warnings on non-macOS
+    });
 }

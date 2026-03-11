@@ -3,6 +3,7 @@ use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
+use crate::managers::model::{EngineType, ModelInfo, ModelManager};
 use crate::managers::transcription::TranscriptionManager;
 use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
@@ -43,6 +44,136 @@ pub(crate) struct ChunkingHandle {
 
 pub struct ActiveChunkingHandle(pub Mutex<Option<ChunkingHandle>>);
 
+fn should_use_background_chunking(model_info: Option<&ModelInfo>) -> bool {
+    match model_info {
+        // Parakeet V3 is multilingual and supports long audio, but this app's
+        // current chunking strategy uses independent 15s chunks with minimal
+        // overlap and no decoder context. That hurts language stability and
+        // causes dropped phrases, so keep full-context transcription instead.
+        Some(info) if info.id == "parakeet-tdt-0.6b-v3" => false,
+        Some(info) => matches!(
+            info.engine_type,
+            EngineType::Whisper | EngineType::MoonshineStreaming
+        ),
+        None => true,
+    }
+}
+
+fn normalize_language_for_model_support(language: &str) -> &str {
+    match language {
+        "zh-Hans" | "zh-Hant" => "zh",
+        other => other,
+    }
+}
+
+fn model_supports_selected_language(model_info: &ModelInfo, settings: &AppSettings) -> bool {
+    if settings.selected_language == "auto" {
+        return true;
+    }
+
+    let normalized_language = normalize_language_for_model_support(&settings.selected_language);
+
+    model_info
+        .supported_languages
+        .iter()
+        .any(|language| language == &settings.selected_language || language == normalized_language)
+}
+
+fn find_best_model_fallback(
+    model_manager: &ModelManager,
+    settings: &AppSettings,
+    require_translation: bool,
+    excluded_model_id: &str,
+) -> Option<ModelInfo> {
+    let mut preferred_ids: Vec<String> = Vec::new();
+
+    if let Some(long_model_id) = settings.long_audio_model.as_ref() {
+        if !long_model_id.is_empty() {
+            preferred_ids.push(long_model_id.clone());
+        }
+    }
+
+    if require_translation {
+        preferred_ids.extend(["large", "medium", "small"].into_iter().map(String::from));
+    } else {
+        preferred_ids.extend(
+            ["turbo", "large", "medium", "small", "breeze-asr"]
+                .into_iter()
+                .map(String::from),
+        );
+    }
+
+    for model_id in preferred_ids {
+        if model_id == excluded_model_id {
+            continue;
+        }
+
+        let Some(model_info) = model_manager.get_model_info(&model_id) else {
+            continue;
+        };
+
+        if !model_info.is_downloaded {
+            continue;
+        }
+
+        if require_translation && !model_info.supports_translation {
+            continue;
+        }
+
+        if !model_supports_selected_language(&model_info, settings) {
+            continue;
+        }
+
+        return Some(model_info);
+    }
+
+    model_manager
+        .get_available_models()
+        .into_iter()
+        .filter(|model_info| model_info.id != excluded_model_id)
+        .filter(|model_info| model_info.is_downloaded)
+        .filter(|model_info| !require_translation || model_info.supports_translation)
+        .filter(|model_info| model_supports_selected_language(model_info, settings))
+        .max_by(|left, right| {
+            left.accuracy_score
+                .partial_cmp(&right.accuracy_score)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+}
+
+fn resolve_runtime_model_override(
+    current_model_info: Option<&ModelInfo>,
+    model_manager: &ModelManager,
+    settings: &AppSettings,
+) -> Option<(ModelInfo, String)> {
+    let model_info = current_model_info?;
+
+    if model_info.id != "parakeet-tdt-0.6b-v3" {
+        return None;
+    }
+
+    if settings.translate_to_english && !model_info.supports_translation {
+        let fallback = find_best_model_fallback(model_manager, settings, true, &model_info.id)?;
+        return Some((
+            fallback,
+            "Parakeet V3 does not support translation-to-English in this runtime".to_string(),
+        ));
+    }
+
+    if !model_supports_selected_language(model_info, settings) {
+        let fallback = find_best_model_fallback(model_manager, settings, false, &model_info.id)?;
+        return Some((
+            fallback,
+            format!(
+                "Parakeet V3 does not support the selected language '{}'",
+                settings.selected_language
+            ),
+        ));
+    }
+
+    None
+}
+
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
 /// transcription pipeline finishes — whether it completes normally or panics.
 struct FinishGuard(AppHandle);
@@ -80,11 +211,19 @@ fn deduplicate_boundary(prev: &str, next: &str) -> String {
     for n in (1..=max_overlap).rev() {
         let prev_suffix: Vec<String> = prev_words[prev_words.len() - n..]
             .iter()
-            .map(|w| w.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+            .map(|w| {
+                w.to_lowercase()
+                    .trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_string()
+            })
             .collect();
         let next_prefix: Vec<String> = next_words[..n]
             .iter()
-            .map(|w| w.to_lowercase().trim_matches(|c: char| !c.is_alphanumeric()).to_string())
+            .map(|w| {
+                w.to_lowercase()
+                    .trim_matches(|c: char| !c.is_alphanumeric())
+                    .to_string()
+            })
             .collect();
         if prev_suffix == next_prefix {
             return next_words[n..].join(" ");
@@ -647,91 +786,108 @@ impl ShortcutAction for TranscribeAction {
             shortcut::register_pause_shortcut(app);
             shortcut::register_action_shortcuts(app);
 
+            let current_model_info = app.try_state::<Arc<ModelManager>>().and_then(|mm| {
+                let settings = get_settings(app);
+                let model_id = if settings.selected_model.is_empty() {
+                    app.state::<Arc<TranscriptionManager>>().get_current_model()
+                } else {
+                    Some(settings.selected_model)
+                }?;
+                mm.get_model_info(&model_id)
+            });
+
             // ── Spawn background streaming transcription ──────────────────────────
             // The sampler wakes every 500 ms and, once 15 s of new speech are
             // accumulated, sends a chunk to the worker for transcription.
             // The worker processes chunks sequentially so the engine is never
             // called concurrently.  On stop(), only the last few seconds remain.
-            let rm_s = Arc::clone(&*app.state::<Arc<AudioRecordingManager>>());
-            let tm_s = Arc::clone(&*app.state::<Arc<TranscriptionManager>>());
+            if should_use_background_chunking(current_model_info.as_ref()) {
+                let rm_s = Arc::clone(&*app.state::<Arc<AudioRecordingManager>>());
+                let tm_s = Arc::clone(&*app.state::<Arc<TranscriptionManager>>());
 
-            let shared_state = Arc::new(Mutex::new(ChunkingSharedState {
-                last_committed_idx: 0,
-                next_chunk_idx: 0,
-            }));
-            let results: Arc<Mutex<Vec<(usize, String)>>> = Arc::new(Mutex::new(Vec::new()));
+                let shared_state = Arc::new(Mutex::new(ChunkingSharedState {
+                    last_committed_idx: 0,
+                    next_chunk_idx: 0,
+                }));
+                let results: Arc<Mutex<Vec<(usize, String)>>> = Arc::new(Mutex::new(Vec::new()));
 
-            let (chunk_tx, chunk_rx) =
-                std::sync::mpsc::channel::<Option<(Vec<f32>, usize)>>();
+                let (chunk_tx, chunk_rx) = std::sync::mpsc::channel::<Option<(Vec<f32>, usize)>>();
 
-            // Sampler thread: polls audio every 500 ms, sends 15-s chunks
-            let shared_s = Arc::clone(&shared_state);
-            let tx_s = chunk_tx.clone();
-            let sampler_handle = std::thread::spawn(move || {
-                loop {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
+                // Sampler thread: polls audio every 500 ms, sends 15-s chunks
+                let shared_s = Arc::clone(&shared_state);
+                let tx_s = chunk_tx.clone();
+                let sampler_handle = std::thread::spawn(move || {
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_millis(500));
 
-                    let snapshot = match rm_s.snapshot_recording() {
-                        Some(s) => s,
-                        None => break, // recording stopped
-                    };
+                        let snapshot = match rm_s.snapshot_recording() {
+                            Some(s) => s,
+                            None => break, // recording stopped
+                        };
 
-                    let total = snapshot.len();
-                    let (last_committed, next_idx) = {
-                        let s = shared_s.lock().unwrap();
-                        (s.last_committed_idx, s.next_chunk_idx)
-                    };
-                    let new_samples = total.saturating_sub(last_committed);
+                        let total = snapshot.len();
+                        let (last_committed, next_idx) = {
+                            let s = shared_s.lock().unwrap();
+                            (s.last_committed_idx, s.next_chunk_idx)
+                        };
+                        let new_samples = total.saturating_sub(last_committed);
 
-                    if new_samples >= CHUNK_INTERVAL_SAMPLES {
-                        // Include a short overlap at the start to avoid cutting words
-                        let overlap_start =
-                            last_committed.saturating_sub(CHUNK_OVERLAP_SAMPLES);
-                        let chunk = snapshot[overlap_start..].to_vec();
-                        {
-                            let mut s = shared_s.lock().unwrap();
-                            s.last_committed_idx = total;
-                            s.next_chunk_idx = next_idx + 1;
-                        }
-                        debug!(
-                            "Chunk sampler: sending chunk {} ({:.1}s of audio)",
-                            next_idx,
-                            chunk.len() as f32 / 16_000.0
-                        );
-                        if tx_s.send(Some((chunk, next_idx))).is_err() {
-                            break;
+                        if new_samples >= CHUNK_INTERVAL_SAMPLES {
+                            // Include a short overlap at the start to avoid cutting words
+                            let overlap_start =
+                                last_committed.saturating_sub(CHUNK_OVERLAP_SAMPLES);
+                            let chunk = snapshot[overlap_start..].to_vec();
+                            {
+                                let mut s = shared_s.lock().unwrap();
+                                s.last_committed_idx = total;
+                                s.next_chunk_idx = next_idx + 1;
+                            }
+                            debug!(
+                                "Chunk sampler: sending chunk {} ({:.1}s of audio)",
+                                next_idx,
+                                chunk.len() as f32 / 16_000.0
+                            );
+                            if tx_s.send(Some((chunk, next_idx))).is_err() {
+                                break;
+                            }
                         }
                     }
-                }
-                debug!("Chunk sampler thread exited");
-            });
-
-            // Worker thread: transcribes chunks sequentially
-            let results_w = Arc::clone(&results);
-            let worker_handle = std::thread::spawn(move || {
-                while let Ok(Some((samples, idx))) = chunk_rx.recv() {
-                    debug!(
-                        "Chunk worker: transcribing chunk {} ({:.1}s)",
-                        idx,
-                        samples.len() as f32 / 16_000.0
-                    );
-                    let text = tm_s.transcribe(samples).unwrap_or_default();
-                    if !text.is_empty() {
-                        debug!("Chunk {}: '{:.60}...'", idx, text);
-                        results_w.lock().unwrap().push((idx, text));
-                    }
-                }
-                debug!("Chunk worker thread exited");
-            });
-
-            if let Some(ch) = app.try_state::<ActiveChunkingHandle>() {
-                *ch.0.lock().unwrap() = Some(ChunkingHandle {
-                    sampler_handle,
-                    worker_handle,
-                    chunk_tx,
-                    shared_state,
-                    results,
+                    debug!("Chunk sampler thread exited");
                 });
+
+                // Worker thread: transcribes chunks sequentially
+                let results_w = Arc::clone(&results);
+                let worker_handle = std::thread::spawn(move || {
+                    while let Ok(Some((samples, idx))) = chunk_rx.recv() {
+                        debug!(
+                            "Chunk worker: transcribing chunk {} ({:.1}s)",
+                            idx,
+                            samples.len() as f32 / 16_000.0
+                        );
+                        let text = tm_s.transcribe(samples).unwrap_or_default();
+                        if !text.is_empty() {
+                            debug!("Chunk {}: '{:.60}...'", idx, text);
+                            results_w.lock().unwrap().push((idx, text));
+                        }
+                    }
+                    debug!("Chunk worker thread exited");
+                });
+
+                if let Some(ch) = app.try_state::<ActiveChunkingHandle>() {
+                    *ch.0.lock().unwrap() = Some(ChunkingHandle {
+                        sampler_handle,
+                        worker_handle,
+                        chunk_tx,
+                        shared_state,
+                        results,
+                    });
+                }
+            } else if let Some(info) = current_model_info {
+                debug!(
+                    "Skipping background chunking for model '{}' ({}) to preserve full-context transcription",
+                    info.name,
+                    info.id
+                );
             }
         }
 
@@ -842,8 +998,7 @@ impl ShortcutAction for TranscribeAction {
                         };
 
                         // Send the remaining audio (with overlap) as the final chunk
-                        let overlap_start =
-                            last_committed.saturating_sub(CHUNK_OVERLAP_SAMPLES);
+                        let overlap_start = last_committed.saturating_sub(CHUNK_OVERLAP_SAMPLES);
                         let remaining = all_samples[overlap_start..].to_vec();
                         let sent_final = !remaining.is_empty();
                         if sent_final {
@@ -867,8 +1022,7 @@ impl ShortcutAction for TranscribeAction {
                         } else {
                             let mut parts = vec![results[0].1.clone()];
                             for i in 1..results.len() {
-                                let d =
-                                    deduplicate_boundary(&results[i - 1].1, &results[i].1);
+                                let d = deduplicate_boundary(&results[i - 1].1, &results[i].1);
                                 if !d.is_empty() {
                                     parts.push(d);
                                 }
@@ -923,6 +1077,42 @@ impl ShortcutAction for TranscribeAction {
                 let settings_for_model = get_settings(&ah);
                 let original_model = tm.get_current_model();
                 let mut switched_model = false;
+                let model_manager = ah.state::<Arc<ModelManager>>();
+                let selected_model_info = original_model
+                    .as_deref()
+                    .and_then(|model_id| model_manager.get_model_info(model_id));
+
+                if let Some((fallback_model, reason)) = resolve_runtime_model_override(
+                    selected_model_info.as_ref(),
+                    &model_manager,
+                    &settings_for_model,
+                ) {
+                    if original_model.as_deref() != Some(fallback_model.id.as_str()) {
+                        info!(
+                            "{}. Temporarily switching from Parakeet V3 to '{}' ({})",
+                            reason, fallback_model.name, fallback_model.id
+                        );
+                        if let Err(err) = tm.load_model(&fallback_model.id) {
+                            warn!(
+                                "Failed to load fallback model '{}' after Parakeet V3 compatibility check: {}",
+                                fallback_model.id,
+                                err
+                            );
+                        } else {
+                            switched_model = true;
+                        }
+                    }
+                } else if let Some(info) = selected_model_info.as_ref() {
+                    if info.id == "parakeet-tdt-0.6b-v3"
+                        && settings_for_model.selected_language != "auto"
+                        && !model_supports_selected_language(info, &settings_for_model)
+                    {
+                        warn!(
+                            "Parakeet V3 is being used with unsupported language '{}', and no downloaded fallback model was available.",
+                            settings_for_model.selected_language
+                        );
+                    }
+                }
 
                 if let Some(ref long_model_id) = settings_for_model.long_audio_model {
                     if duration_seconds > settings_for_model.long_audio_threshold_seconds
@@ -953,9 +1143,7 @@ impl ShortcutAction for TranscribeAction {
                         );
                         // Fallback retry with accurate model on empty result
                         if text.is_empty() && duration_seconds > 1.0 && !switched_model {
-                            if let Some(ref long_model_id) =
-                                settings_for_model.long_audio_model
-                            {
+                            if let Some(ref long_model_id) = settings_for_model.long_audio_model {
                                 if original_model.as_deref() != Some(long_model_id.as_str()) {
                                     info!(
                                         "Empty result for {:.1}s audio, retrying with long model",
@@ -1059,9 +1247,7 @@ impl ShortcutAction for TranscribeAction {
 
                         if let Some(action) = selected_action {
                             post_process_prompt = Some(action.prompt);
-                        } else if let Some(prompt_id) =
-                            &settings.post_process_selected_prompt_id
-                        {
+                        } else if let Some(prompt_id) = &settings.post_process_selected_prompt_id {
                             if let Some(prompt) = settings
                                 .post_process_prompts
                                 .iter()
@@ -1078,10 +1264,7 @@ impl ShortcutAction for TranscribeAction {
                     let paste_time = Instant::now();
                     ah.run_on_main_thread(move || {
                         match utils::paste(final_text, ah_clone.clone()) {
-                            Ok(()) => debug!(
-                                "Text pasted in {:?}",
-                                paste_time.elapsed()
-                            ),
+                            Ok(()) => debug!("Text pasted in {:?}", paste_time.elapsed()),
                             Err(e) => error!("Failed to paste transcription: {}", e),
                         }
                         utils::hide_recording_overlay(&ah_clone);
