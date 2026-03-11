@@ -66,6 +66,23 @@ fn normalize_language_for_model_support(language: &str) -> &str {
     }
 }
 
+fn app_language_prefers_english(settings: &AppSettings) -> bool {
+    settings
+        .app_language
+        .split('-')
+        .next()
+        .unwrap_or("en")
+        .eq_ignore_ascii_case("en")
+}
+
+fn parakeet_v3_should_stay_on_english_runtime(settings: &AppSettings) -> bool {
+    if settings.selected_language != "auto" {
+        return normalize_language_for_model_support(&settings.selected_language) == "en";
+    }
+
+    app_language_prefers_english(settings)
+}
+
 fn model_supports_selected_language(model_info: &ModelInfo, settings: &AppSettings) -> bool {
     if settings.selected_language == "auto" {
         return true;
@@ -158,6 +175,22 @@ fn resolve_runtime_model_override(
             fallback,
             "Parakeet V3 does not support translation-to-English in this runtime".to_string(),
         ));
+    }
+
+    if !parakeet_v3_should_stay_on_english_runtime(settings) {
+        let fallback = find_best_model_fallback(model_manager, settings, false, &model_info.id)?;
+        let reason = if settings.selected_language != "auto" {
+            format!(
+                "Parakeet V3 is only recommended for English in this runtime, but the selected language is '{}'",
+                settings.selected_language
+            )
+        } else {
+            format!(
+                "Parakeet V3 is only recommended for English in this runtime, but the app language is '{}'",
+                settings.app_language
+            )
+        };
+        return Some((fallback, reason));
     }
 
     if !model_supports_selected_language(model_info, settings) {
@@ -1103,14 +1136,21 @@ impl ShortcutAction for TranscribeAction {
                         }
                     }
                 } else if let Some(info) = selected_model_info.as_ref() {
-                    if info.id == "parakeet-tdt-0.6b-v3"
-                        && settings_for_model.selected_language != "auto"
-                        && !model_supports_selected_language(info, &settings_for_model)
-                    {
-                        warn!(
-                            "Parakeet V3 is being used with unsupported language '{}', and no downloaded fallback model was available.",
-                            settings_for_model.selected_language
-                        );
+                    if info.id == "parakeet-tdt-0.6b-v3" {
+                        if settings_for_model.selected_language != "auto"
+                            && !model_supports_selected_language(info, &settings_for_model)
+                        {
+                            warn!(
+                                "Parakeet V3 is being used with unsupported language '{}', and no downloaded fallback model was available.",
+                                settings_for_model.selected_language
+                            );
+                        } else if !parakeet_v3_should_stay_on_english_runtime(&settings_for_model) {
+                            warn!(
+                                "Parakeet V3 is being used outside its English-first runtime recommendation (selected_language='{}', app_language='{}'), and no downloaded fallback model was available.",
+                                settings_for_model.selected_language,
+                                settings_for_model.app_language
+                            );
+                        }
                     }
                 }
 

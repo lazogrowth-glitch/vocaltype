@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use tar::Archive;
 use tauri::{AppHandle, Emitter, Manager};
 
-const MODEL_ASSET_BASE_URL: &str = "https://downloads.vocaltypeai.com/models";
+const MODEL_ASSET_BASE_URL: &str = "https://blob.handy.computer";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub enum EngineType {
