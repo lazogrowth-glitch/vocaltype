@@ -468,8 +468,12 @@ pub fn run(cli_args: CliArgs) {
             let tray_available = settings.show_tray_icon && !cli_args.no_tray;
             if !should_hide || !tray_available {
                 if let Some(main_window) = app_handle.get_webview_window("main") {
-                    main_window.show().unwrap();
-                    main_window.set_focus().unwrap();
+                    if let Err(err) = main_window.show() {
+                        log::error!("Failed to show main window during setup: {}", err);
+                    }
+                    if let Err(err) = main_window.set_focus() {
+                        log::error!("Failed to focus main window during setup: {}", err);
+                    }
                 }
             }
 

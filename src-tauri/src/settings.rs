@@ -3,6 +3,7 @@ use serde::de::{self, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use specta::Type;
 use std::collections::HashMap;
+use std::ops::Deref;
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 
@@ -858,6 +859,12 @@ impl AppSettings {
     }
 }
 
+fn persist_store(store: &impl Deref<Target = tauri_plugin_store::Store<tauri::Wry>>) {
+    if let Err(err) = store.save() {
+        warn!("Failed to save settings store: {}", err);
+    }
+}
+
 pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
     // Initialize store
     let store = app
@@ -884,6 +891,7 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                 if updated {
                     debug!("Settings updated with new bindings");
                     store.set("settings", serde_json::to_value(&settings).unwrap());
+                    persist_store(&store);
                 }
 
                 settings
@@ -893,12 +901,14 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                 // Fall back to default settings if parsing fails
                 let default_settings = get_default_settings();
                 store.set("settings", serde_json::to_value(&default_settings).unwrap());
+                persist_store(&store);
                 default_settings
             }
         }
     } else {
         let default_settings = get_default_settings();
         store.set("settings", serde_json::to_value(&default_settings).unwrap());
+        persist_store(&store);
         default_settings
     };
 
@@ -906,6 +916,7 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
     let language_changed = ensure_selected_language_default(&mut settings);
     if post_process_changed || language_changed {
         store.set("settings", serde_json::to_value(&settings).unwrap());
+        persist_store(&store);
     }
 
     settings
@@ -920,11 +931,13 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
         serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
             let default_settings = get_default_settings();
             store.set("settings", serde_json::to_value(&default_settings).unwrap());
+            persist_store(&store);
             default_settings
         })
     } else {
         let default_settings = get_default_settings();
         store.set("settings", serde_json::to_value(&default_settings).unwrap());
+        persist_store(&store);
         default_settings
     };
 
@@ -932,6 +945,7 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
     let language_changed = ensure_selected_language_default(&mut settings);
     if post_process_changed || language_changed {
         store.set("settings", serde_json::to_value(&settings).unwrap());
+        persist_store(&store);
     }
 
     settings
@@ -943,6 +957,7 @@ pub fn write_settings(app: &AppHandle, settings: AppSettings) {
         .expect("Failed to initialize store");
 
     store.set("settings", serde_json::to_value(&settings).unwrap());
+    persist_store(&store);
 }
 
 pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {
@@ -954,9 +969,21 @@ pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {
 pub fn get_stored_binding(app: &AppHandle, id: &str) -> ShortcutBinding {
     let bindings = get_bindings(app);
 
-    let binding = bindings.get(id).unwrap().clone();
+    if let Some(binding) = bindings.get(id) {
+        return binding.clone();
+    }
 
-    binding
+    if let Some(binding) = get_default_settings().bindings.get(id) {
+        return binding.clone();
+    }
+
+    ShortcutBinding {
+        id: id.to_string(),
+        name: id.to_string(),
+        description: String::new(),
+        default_binding: String::new(),
+        current_binding: String::new(),
+    }
 }
 
 pub fn get_history_limit(app: &AppHandle) -> usize {

@@ -43,37 +43,34 @@ const getAuthStore = () => {
   return storePromise;
 };
 
-const readLocalToken = () => localStorage.getItem(AUTH_TOKEN_KEY);
-
-const writeLocalToken = (token: string | null) => {
-  if (token) {
-    localStorage.setItem(AUTH_TOKEN_KEY, token);
-    return;
-  }
-
-  localStorage.removeItem(AUTH_TOKEN_KEY);
-};
-
-const readLocalSession = () => {
-  const raw = localStorage.getItem(AUTH_SESSION_KEY);
-  if (!raw) {
+const readLegacyLocalToken = () => {
+  try {
+    return localStorage.getItem(AUTH_TOKEN_KEY);
+  } catch {
     return null;
   }
+};
 
+const readLegacyLocalSession = () => {
   try {
+    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    if (!raw) {
+      return null;
+    }
+
     return JSON.parse(raw) as AuthSession;
   } catch {
     return null;
   }
 };
 
-const writeLocalSession = (session: AuthSession | null) => {
-  if (session) {
-    localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify(session));
-    return;
+const clearLegacyLocalAuth = () => {
+  try {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    localStorage.removeItem(AUTH_SESSION_KEY);
+  } catch {
+    // Ignore localStorage access failures in non-browser contexts.
   }
-
-  localStorage.removeItem(AUTH_SESSION_KEY);
 };
 
 const getApiBaseUrl = () => {
@@ -98,7 +95,10 @@ const buildHeaders = (token?: string) => {
 
 const parseError = async (response: Response) => {
   try {
-    const data = (await response.json()) as { error?: string; message?: string };
+    const data = (await response.json()) as {
+      error?: string;
+      message?: string;
+    };
     return data.error || data.message || `Request failed (${response.status})`;
   } catch {
     return `Request failed (${response.status})`;
@@ -232,7 +232,7 @@ export const authClient = {
       return cachedToken;
     }
 
-    const localToken = readLocalToken();
+    const legacyToken = readLegacyLocalToken();
 
     try {
       const store = await getAuthStore();
@@ -240,18 +240,22 @@ export const authClient = {
       const resolvedToken =
         typeof storedToken === "string" && storedToken.trim()
           ? storedToken
-          : localToken;
+          : legacyToken;
 
       cachedToken = resolvedToken ?? null;
-      writeLocalToken(cachedToken);
 
-      if (!storedToken && localToken) {
-        await store.set(AUTH_TOKEN_KEY, localToken);
+      if (!storedToken && legacyToken) {
+        await store.set(AUTH_TOKEN_KEY, legacyToken);
         await store.save();
       }
+
+      clearLegacyLocalAuth();
     } catch (error) {
-      console.warn("Failed to hydrate auth token from persistent store:", error);
-      cachedToken = localToken;
+      console.warn(
+        "Failed to hydrate auth token from persistent store:",
+        error,
+      );
+      cachedToken = legacyToken;
     }
 
     hasHydratedToken = true;
@@ -261,43 +265,43 @@ export const authClient = {
   async hydrateStoredSession() {
     await this.hydrateStoredToken();
 
-    const localSession = readLocalSession();
+    const legacySession = readLegacyLocalSession();
 
     try {
       const store = await getAuthStore();
       const storedSession = await store.get<AuthSession>(AUTH_SESSION_KEY);
-      const resolvedSession = storedSession ?? localSession;
+      const resolvedSession = storedSession ?? legacySession;
 
       cachedSession = resolvedSession ?? null;
-      writeLocalSession(cachedSession);
 
-      if (!storedSession && localSession) {
-        await store.set(AUTH_SESSION_KEY, localSession);
+      if (!storedSession && legacySession) {
+        await store.set(AUTH_SESSION_KEY, legacySession);
         await store.save();
       }
+
+      clearLegacyLocalAuth();
     } catch (error) {
       console.warn(
         "Failed to hydrate auth session from persistent store:",
         error,
       );
-      cachedSession = localSession;
+      cachedSession = legacySession;
     }
 
     return cachedSession;
   },
 
   getStoredToken() {
-    return cachedToken ?? readLocalToken();
+    return cachedToken;
   },
 
   getStoredSession() {
-    return cachedSession ?? readLocalSession();
+    return cachedSession;
   },
 
   async setStoredSession(session: AuthSession) {
     cachedSession = session;
     await this.setStoredToken(session.token);
-    writeLocalSession(session);
 
     try {
       const store = await getAuthStore();
@@ -311,7 +315,7 @@ export const authClient = {
   async setStoredToken(token: string) {
     cachedToken = token;
     hasHydratedToken = true;
-    writeLocalToken(token);
+    clearLegacyLocalAuth();
 
     try {
       const store = await getAuthStore();
@@ -324,7 +328,7 @@ export const authClient = {
 
   async clearStoredSession() {
     cachedSession = null;
-    writeLocalSession(null);
+    clearLegacyLocalAuth();
     await this.clearStoredToken();
 
     try {
@@ -339,7 +343,7 @@ export const authClient = {
   async clearStoredToken() {
     cachedToken = null;
     hasHydratedToken = true;
-    writeLocalToken(null);
+    clearLegacyLocalAuth();
 
     try {
       const store = await getAuthStore();
@@ -414,13 +418,10 @@ export const authClient = {
   },
 
   async forgotPassword(email: string): Promise<void> {
-    await request<{ ok: boolean }>(
-      "/auth/forgot-password",
-      {
-        method: "POST",
-        body: JSON.stringify({ email }),
-      },
-    );
+    await request<{ ok: boolean }>("/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
   },
 
   async verifyResetCode(email: string, code: string): Promise<boolean> {
@@ -435,16 +436,16 @@ export const authClient = {
   },
 
   async resetPassword(payload: ResetPasswordPayload): Promise<AuthSession> {
-    return request<AuthSession>(
-      "/auth/reset-password",
-      {
-        method: "POST",
-        body: JSON.stringify(payload),
-      },
-    );
+    return request<AuthSession>("/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
   },
 
-  async changePassword(token: string, payload: ChangePasswordPayload): Promise<void> {
+  async changePassword(
+    token: string,
+    payload: ChangePasswordPayload,
+  ): Promise<void> {
     await request<{ ok: boolean }>(
       "/auth/change-password",
       {

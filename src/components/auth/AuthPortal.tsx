@@ -2,7 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type { AuthPayload, AuthSession, ChangePasswordPayload } from "@/lib/auth/types";
+import type {
+  AuthPayload,
+  AuthSession,
+  ChangePasswordPayload,
+} from "@/lib/auth/types";
 import { authClient } from "@/lib/auth/client";
 import VocalTypeLogo from "../icons/VocalTypeLogo";
 import { Button } from "../ui/Button";
@@ -43,15 +47,15 @@ const looksLikeEmailExists = (message: string) => {
 
 const formatAccessLabel = (
   session: AuthSession,
-  t: (key: string, opts?: object) => string,
+  translate: (key: string, opts?: Record<string, unknown>) => string,
 ) => {
   if (session.subscription.status === "active") {
-    return t("auth.access.active");
+    return translate("auth.access.active");
   }
 
   if (session.subscription.status === "trialing") {
     if (!session.subscription.trial_ends_at) {
-      return t("auth.access.trialActive");
+      return translate("auth.access.trialActive");
     }
 
     const trialEnd = new Date(session.subscription.trial_ends_at);
@@ -61,15 +65,15 @@ const formatAccessLabel = (
     );
 
     return diff <= 1
-      ? t("auth.access.trialEndsToday")
-      : t("auth.access.trialDaysLeft", { count: diff });
+      ? translate("auth.access.trialEndsToday")
+      : translate("auth.access.trialDaysLeft", { count: diff });
   }
 
   if (session.subscription.status === "canceled") {
-    return t("auth.access.canceled");
+    return translate("auth.access.canceled");
   }
 
-  return t("auth.access.trialEnded");
+  return translate("auth.access.trialEnded");
 };
 
 export const AuthPortal = ({
@@ -128,7 +132,10 @@ export const AuthPortal = ({
   }, [error, mode]);
 
   const accessLabel = useMemo(
-    () => (session ? formatAccessLabel(session, t) : null),
+    () =>
+      session
+        ? formatAccessLabel(session, (key, opts) => t(key, opts) as string)
+        : null,
     [session, t],
   );
 
@@ -196,7 +203,9 @@ export const AuthPortal = ({
 
   // ── Forgot password handlers ─────────────────────────────────────────────
 
-  const handleForgotSendCode = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleForgotSendCode = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
     event.preventDefault();
     setForgotError(null);
     setForgotBusy(true);
@@ -237,7 +246,11 @@ export const AuthPortal = ({
       }, 2000);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (message.toLowerCase().includes("invalide") || message.toLowerCase().includes("expired") || message.toLowerCase().includes("expiré")) {
+      if (
+        message.toLowerCase().includes("invalide") ||
+        message.toLowerCase().includes("expired") ||
+        message.toLowerCase().includes("expiré")
+      ) {
         setForgotError(t("auth.errors.invalidResetCode"));
       } else {
         setForgotError(message || t("auth.errors.networkError"));
@@ -258,7 +271,9 @@ export const AuthPortal = ({
 
   // ── Change password handler ──────────────────────────────────────────────
 
-  const handleChangePassword = async (event: React.FormEvent<HTMLFormElement>) => {
+  const handleChangePassword = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
     event.preventDefault();
     setChangePwdError(null);
     setChangePwdSuccess(false);
@@ -284,7 +299,11 @@ export const AuthPortal = ({
       setShowChangePassword(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (message.toLowerCase().includes("actuel") || message.toLowerCase().includes("incorrect") || message.toLowerCase().includes("wrong")) {
+      if (
+        message.toLowerCase().includes("actuel") ||
+        message.toLowerCase().includes("incorrect") ||
+        message.toLowerCase().includes("wrong")
+      ) {
         setChangePwdError(t("auth.errors.wrongOldPassword"));
       } else {
         setChangePwdError(message || t("auth.errors.networkError"));
@@ -459,7 +478,10 @@ export const AuthPortal = ({
                   </button>
 
                   {showChangePassword && (
-                    <form className="mt-4 space-y-3" onSubmit={handleChangePassword}>
+                    <form
+                      className="mt-4 space-y-3"
+                      onSubmit={handleChangePassword}
+                    >
                       <div className="space-y-1">
                         <label className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">
                           {t("auth.oldPassword")}
