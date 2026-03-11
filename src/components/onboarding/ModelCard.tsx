@@ -18,6 +18,11 @@ import { LANGUAGES } from "../../lib/constants/languages";
 import Badge from "../ui/Badge";
 import { Button } from "../ui/Button";
 
+type ProductBadge = {
+  label: string;
+  variant: "primary" | "success" | "secondary";
+};
+
 // Get display text for model's language support
 const getLanguageDisplayText = (
   supportedLanguages: string[],
@@ -30,6 +35,66 @@ const getLanguageDisplayText = (
     return t("modelSelector.capabilities.languageOnly", { language: langName });
   }
   return t("modelSelector.capabilities.multiLanguage");
+};
+
+const getProductBadges = (
+  model: ModelInfo,
+  t: (key: string, options?: Record<string, unknown>) => string,
+): ProductBadge[] => {
+  if (model.id === "turbo") {
+    return [
+      {
+        label: t("modelSelector.badges.bestDefault", {
+          defaultValue: "Best Default",
+        }),
+        variant: "primary",
+      },
+    ];
+  }
+
+  if (model.id === "large") {
+    return [
+      {
+        label: t("modelSelector.badges.bestQuality", {
+          defaultValue: "Best Quality",
+        }),
+        variant: "success",
+      },
+    ];
+  }
+
+  if (model.id === "parakeet-tdt-0.6b-v2") {
+    return [
+      {
+        label: t("modelSelector.badges.fastEnglish", {
+          defaultValue: "Fast English",
+        }),
+        variant: "secondary",
+      },
+    ];
+  }
+
+  if (model.id === "parakeet-tdt-0.6b-v3") {
+    return [
+      {
+        label: t("modelSelector.badges.experimental", {
+          defaultValue: "Experimental",
+        }),
+        variant: "secondary",
+      },
+    ];
+  }
+
+  if (model.is_recommended) {
+    return [
+      {
+        label: t("onboarding.recommended"),
+        variant: "primary",
+      },
+    ];
+  }
+
+  return [];
 };
 
 export type ModelCardStatus =
@@ -77,6 +142,7 @@ const ModelCard: React.FC<ModelCardProps> = ({
   // Get translated model name and description
   const displayName = getTranslatedModelName(model, t);
   const displayDescription = getTranslatedModelDescription(model, t);
+  const productBadges = getProductBadges(model, t);
 
   const baseClasses =
     "flex flex-col rounded-xl px-4 py-3 gap-2 text-left transition-all duration-200";
@@ -137,9 +203,12 @@ const ModelCard: React.FC<ModelCardProps> = ({
             >
               {displayName}
             </h3>
-            {showRecommended && model.is_recommended && (
-              <Badge variant="primary">{t("onboarding.recommended")}</Badge>
-            )}
+            {showRecommended &&
+              productBadges.map((badge) => (
+                <Badge key={badge.label} variant={badge.variant}>
+                  {badge.label}
+                </Badge>
+              ))}
             {status === "active" && (
               <Badge variant="primary">
                 <Check className="w-3 h-3 mr-1" />

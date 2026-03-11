@@ -7,6 +7,23 @@ import ModelCard from "./ModelCard";
 import VocalTypeLogo from "../icons/VocalTypeLogo";
 import { useModelStore } from "../../stores/modelStore";
 
+const getOnboardingRank = (model: ModelInfo): number => {
+  if (model.id === "turbo") return 1000;
+  if (model.id === "large") return 950;
+  if (model.id === "parakeet-tdt-0.6b-v2") return 850;
+  if (model.id === "medium") return 800;
+  if (model.id === "small") return 700;
+  if (model.id === "sense-voice-int8") return 650;
+  if (model.id === "breeze-asr") return 640;
+  if (model.id === "moonshine-medium-streaming-en") return 560;
+  if (model.id === "moonshine-small-streaming-en") return 540;
+  if (model.id === "moonshine-base") return 520;
+  if (model.id === "moonshine-tiny-streaming-en") return 500;
+  if (model.id === "parakeet-tdt-0.6b-v3") return 300;
+  if (model.id === "gemini-api") return 200;
+  return Math.round(model.accuracy_score * 1000 + model.speed_score * 100);
+};
+
 interface OnboardingProps {
   onModelSelected: () => void;
 }
@@ -111,7 +128,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
             .filter((model: ModelInfo) => !model.is_recommended)
             .sort(
               (a: ModelInfo, b: ModelInfo) =>
-                Number(a.size_mb) - Number(b.size_mb),
+                getOnboardingRank(b) - getOnboardingRank(a),
             )
             .map((model: ModelInfo) => (
               <ModelCard

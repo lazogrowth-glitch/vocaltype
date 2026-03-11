@@ -24,6 +24,46 @@ const modelSupportsLanguage = (model: ModelInfo, langCode: string): boolean => {
   return model.supported_languages.includes(langCode);
 };
 
+const getModelRank = (model: ModelInfo): number => {
+  if (model.id === "turbo") return 1000;
+  if (model.id === "large") return 950;
+  if (model.id === "parakeet-tdt-0.6b-v2") return 850;
+  if (model.id === "medium") return 800;
+  if (model.id === "small") return 700;
+  if (model.id === "sense-voice-int8") return 650;
+  if (model.id === "breeze-asr") return 640;
+  if (model.id === "moonshine-medium-streaming-en") return 560;
+  if (model.id === "moonshine-small-streaming-en") return 540;
+  if (model.id === "moonshine-base") return 520;
+  if (model.id === "moonshine-tiny-streaming-en") return 500;
+  if (model.id === "parakeet-tdt-0.6b-v3") return 300;
+  if (model.id === "gemini-api") return 200;
+  return Math.round(model.accuracy_score * 1000 + model.speed_score * 100);
+};
+
+const compareModels = (a: ModelInfo, b: ModelInfo): number => {
+  if (a.is_recommended !== b.is_recommended) {
+    return a.is_recommended ? -1 : 1;
+  }
+
+  const rankDiff = getModelRank(b) - getModelRank(a);
+  if (rankDiff !== 0) {
+    return rankDiff;
+  }
+
+  const accuracyDiff = b.accuracy_score - a.accuracy_score;
+  if (accuracyDiff !== 0) {
+    return accuracyDiff > 0 ? 1 : -1;
+  }
+
+  const speedDiff = b.speed_score - a.speed_score;
+  if (speedDiff !== 0) {
+    return speedDiff > 0 ? 1 : -1;
+  }
+
+  return a.name.localeCompare(b.name);
+};
+
 const ProcessingModelsSection: React.FC = () => {
   const { t } = useTranslation();
   const {
@@ -457,8 +497,10 @@ export const ModelsSettings: React.FC = () => {
       if (a.id === currentModel) return -1;
       if (b.id === currentModel) return 1;
       if (a.is_custom !== b.is_custom) return a.is_custom ? 1 : -1;
-      return 0;
+      return compareModels(a, b);
     });
+
+    available.sort(compareModels);
 
     return {
       downloadedModels: downloaded,

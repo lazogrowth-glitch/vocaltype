@@ -102,7 +102,8 @@ impl ModelManager {
             ModelInfo {
                 id: "small".to_string(),
                 name: "Whisper Small".to_string(),
-                description: "Fast and fairly accurate.".to_string(),
+                description: "Good lightweight offline model. Broad language support, but clearly behind Turbo and Large on accuracy."
+                    .to_string(),
                 filename: "ggml-small.bin".to_string(),
                 url: Some(format!("{}/ggml-small.bin", MODEL_ASSET_BASE_URL)),
                 size_mb: 487,
@@ -111,8 +112,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.60,
-                speed_score: 0.85,
+                accuracy_score: 0.62,
+                speed_score: 0.82,
                 supports_translation: true,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -126,7 +127,8 @@ impl ModelManager {
             ModelInfo {
                 id: "medium".to_string(),
                 name: "Whisper Medium".to_string(),
-                description: "Good accuracy, medium speed".to_string(),
+                description: "Solid multilingual model with better accuracy than Small, but not the best speed or quality tier."
+                    .to_string(),
                 filename: "whisper-medium-q4_1.bin".to_string(),
                 url: Some(format!("{}/whisper-medium-q4_1.bin", MODEL_ASSET_BASE_URL)),
                 size_mb: 492, // Approximate size
@@ -135,7 +137,7 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.75,
+                accuracy_score: 0.76,
                 speed_score: 0.60,
                 supports_translation: true,
                 is_recommended: false,
@@ -149,7 +151,9 @@ impl ModelManager {
             ModelInfo {
                 id: "turbo".to_string(),
                 name: "Whisper Turbo".to_string(),
-                description: "Balanced accuracy and speed.".to_string(),
+                description:
+                    "Best default for most users. Strong multilingual quality with much better speed than Whisper Large."
+                        .to_string(),
                 filename: "ggml-large-v3-turbo.bin".to_string(),
                 url: Some(format!("{}/ggml-large-v3-turbo.bin", MODEL_ASSET_BASE_URL)),
                 size_mb: 1600, // Approximate size
@@ -158,8 +162,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.80,
-                speed_score: 0.40,
+                accuracy_score: 0.88,
+                speed_score: 0.56,
                 supports_translation: false, // Turbo doesn't support translation
                 is_recommended: true,
                 supported_languages: whisper_languages.clone(),
@@ -172,7 +176,9 @@ impl ModelManager {
             ModelInfo {
                 id: "large".to_string(),
                 name: "Whisper Large".to_string(),
-                description: "Good accuracy, but slow.".to_string(),
+                description:
+                    "Highest offline quality in the app for difficult accents, noisy audio, and multilingual dictation. Slowest option."
+                        .to_string(),
                 filename: "ggml-large-v3-q5_0.bin".to_string(),
                 url: Some(format!("{}/ggml-large-v3-q5_0.bin", MODEL_ASSET_BASE_URL)),
                 size_mb: 1100, // Approximate size
@@ -181,8 +187,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.85,
-                speed_score: 0.30,
+                accuracy_score: 0.95,
+                speed_score: 0.28,
                 supports_translation: true,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -195,8 +201,9 @@ impl ModelManager {
             ModelInfo {
                 id: "breeze-asr".to_string(),
                 name: "Breeze ASR".to_string(),
-                description: "Optimized for Taiwanese Mandarin. Code-switching support."
-                    .to_string(),
+                description:
+                    "Specialized choice for Taiwanese Mandarin and Mandarin-heavy code-switching. Not a general-purpose default."
+                        .to_string(),
                 filename: "breeze-asr-q5_k.bin".to_string(),
                 url: Some(format!("{}/breeze-asr-q5_k.bin", MODEL_ASSET_BASE_URL)),
                 size_mb: 1080,
@@ -205,8 +212,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.85,
-                speed_score: 0.35,
+                accuracy_score: 0.90,
+                speed_score: 0.34,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -220,7 +227,9 @@ impl ModelManager {
             ModelInfo {
                 id: "parakeet-tdt-0.6b-v2".to_string(),
                 name: "Parakeet V2".to_string(),
-                description: "English only. The best model for English speakers.".to_string(),
+                description:
+                    "Fast English-only option. Good when you want lower latency and can stay in English."
+                        .to_string(),
                 filename: "parakeet-tdt-0.6b-v2-int8".to_string(), // Directory name
                 url: Some(format!("{}/parakeet-v2-int8.tar.gz", MODEL_ASSET_BASE_URL)),
                 size_mb: 473, // Approximate size for int8 quantized model
@@ -229,8 +238,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::Parakeet,
-                accuracy_score: 0.85,
-                speed_score: 0.85,
+                accuracy_score: 0.82,
+                speed_score: 0.88,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -254,7 +263,7 @@ impl ModelManager {
                 id: "parakeet-tdt-0.6b-v3".to_string(),
                 name: "Parakeet V3".to_string(),
                 description:
-                    "Fast multilingual transcription with automatic language detection for 25 European languages."
+                    "Experimental multilingual ONNX path. Fast, but currently less reliable than Whisper for critical French and mixed-language dictation."
                         .to_string(),
                 filename: "parakeet-tdt-0.6b-v3-int8".to_string(), // Directory name
                 url: Some(format!("{}/parakeet-v3-int8.tar.gz", MODEL_ASSET_BASE_URL)),
@@ -264,8 +273,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::Parakeet,
-                accuracy_score: 0.80,
-                speed_score: 0.85,
+                accuracy_score: 0.45,
+                speed_score: 0.84,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: parakeet_v3_languages,
@@ -278,7 +287,9 @@ impl ModelManager {
             ModelInfo {
                 id: "moonshine-base".to_string(),
                 name: "Moonshine Base".to_string(),
-                description: "Very fast, English only. Handles accents well.".to_string(),
+                description:
+                    "Very fast English-only model. Useful for lightweight local transcription, not top-tier accuracy."
+                        .to_string(),
                 filename: "moonshine-base".to_string(),
                 url: Some(format!("{}/moonshine-base.tar.gz", MODEL_ASSET_BASE_URL)),
                 size_mb: 58,
@@ -287,8 +298,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::Moonshine,
-                accuracy_score: 0.70,
-                speed_score: 0.90,
+                accuracy_score: 0.58,
+                speed_score: 0.93,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -301,7 +312,9 @@ impl ModelManager {
             ModelInfo {
                 id: "moonshine-tiny-streaming-en".to_string(),
                 name: "Moonshine V2 Tiny".to_string(),
-                description: "Ultra-fast, English only".to_string(),
+                description:
+                    "Fastest streaming-style English option. Use when latency matters more than accuracy."
+                        .to_string(),
                 filename: "moonshine-tiny-streaming-en".to_string(),
                 url: Some(format!(
                     "{}/moonshine-tiny-streaming-en.tar.gz",
@@ -313,8 +326,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::MoonshineStreaming,
-                accuracy_score: 0.55,
-                speed_score: 0.95,
+                accuracy_score: 0.42,
+                speed_score: 0.98,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -327,7 +340,9 @@ impl ModelManager {
             ModelInfo {
                 id: "moonshine-small-streaming-en".to_string(),
                 name: "Moonshine V2 Small".to_string(),
-                description: "Fast, English only. Good balance of speed and accuracy.".to_string(),
+                description:
+                    "Fast English streaming-style model with a better balance than Tiny, but still below Whisper on quality."
+                        .to_string(),
                 filename: "moonshine-small-streaming-en".to_string(),
                 url: Some(format!(
                     "{}/moonshine-small-streaming-en.tar.gz",
@@ -339,8 +354,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::MoonshineStreaming,
-                accuracy_score: 0.65,
-                speed_score: 0.90,
+                accuracy_score: 0.54,
+                speed_score: 0.94,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -353,7 +368,9 @@ impl ModelManager {
             ModelInfo {
                 id: "moonshine-medium-streaming-en".to_string(),
                 name: "Moonshine V2 Medium".to_string(),
-                description: "English only. High quality.".to_string(),
+                description:
+                    "Best Moonshine streaming-style variant for English, but still a niche speed-first option."
+                        .to_string(),
                 filename: "moonshine-medium-streaming-en".to_string(),
                 url: Some(format!(
                     "{}/moonshine-medium-streaming-en.tar.gz",
@@ -365,8 +382,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::MoonshineStreaming,
-                accuracy_score: 0.75,
-                speed_score: 0.80,
+                accuracy_score: 0.64,
+                speed_score: 0.88,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -386,8 +403,9 @@ impl ModelManager {
             ModelInfo {
                 id: "sense-voice-int8".to_string(),
                 name: "SenseVoice".to_string(),
-                description: "Very fast. Chinese, English, Japanese, Korean, Cantonese."
-                    .to_string(),
+                description:
+                    "Fast multilingual model for Chinese, English, Japanese, Korean, and Cantonese. Good niche choice, not universal coverage."
+                        .to_string(),
                 filename: "sense-voice-int8".to_string(),
                 url: Some(format!("{}/sense-voice-int8.tar.gz", MODEL_ASSET_BASE_URL)),
                 size_mb: 160,
@@ -396,8 +414,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::SenseVoice,
-                accuracy_score: 0.65,
-                speed_score: 0.95,
+                accuracy_score: 0.72,
+                speed_score: 0.90,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: sense_voice_languages,
@@ -411,7 +429,7 @@ impl ModelManager {
                 id: "gemini-api".to_string(),
                 name: "Gemini API".to_string(),
                 description:
-                    "Cloud-based transcription via Google Gemini. Requires API key and internet."
+                    "Cloud transcription via Google Gemini. Highest flexibility, but requires internet, API key, and sends audio off-device."
                         .to_string(),
                 filename: "".to_string(),
                 url: None,
@@ -421,8 +439,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::GeminiApi,
-                accuracy_score: 0.9,
-                speed_score: 0.7,
+                accuracy_score: 0.93,
+                speed_score: 0.38,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
