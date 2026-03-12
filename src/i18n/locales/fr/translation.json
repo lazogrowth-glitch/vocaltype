@@ -46,11 +46,19 @@
       },
       "parakeet-tdt-0.6b-v2": {
         "name": "Parakeet V2",
-        "description": "Option rapide en anglais uniquement. Utile si tu veux surtout de la faible latence et rester en anglais."
+        "description": "Option rapide en anglais uniquement. Excellente si la personne parle uniquement anglais et que la vitesse compte."
       },
       "parakeet-tdt-0.6b-v3": {
         "name": "Parakeet V3",
-        "description": "Chemin ONNX multilingue expérimental. Rapide, mais actuellement moins fiable que Whisper pour le français critique et les usages multilingues."
+        "description": "Chemin ONNX multilingue expérimental. Très rapide et peut très bien marcher si on reste dans une seule langue, mais moins robuste que Whisper pour la dictée avec mélange de langues."
+      },
+      "parakeet-tdt-0.6b-v3-english": {
+        "name": "Parakeet V3 Anglais",
+        "description": "Profil Parakeet orienté anglais. Décodage en contexte complet (sans segmentation) pour une vitesse et une stabilité maximales en anglais."
+      },
+      "parakeet-tdt-0.6b-v3-multilingual": {
+        "name": "Parakeet V3 Multilingue",
+        "description": "Profil multilingue expérimental optimisé pour la dictée en français et autres langues non anglaises avec segmentation courte."
       },
       "moonshine-base": {
         "name": "Moonshine Base",
@@ -112,7 +120,10 @@
       "bestDefault": "Meilleur défaut",
       "bestQuality": "Meilleure qualité",
       "fastEnglish": "Anglais rapide",
-      "experimental": "Expérimental"
+      "experimental": "Expérimental",
+      "english": "Anglais",
+      "englishOnly": "Anglais uniquement",
+      "multilingualExperimental": "Multilingue expérimental"
     },
     "custom": "Personnalisé",
     "active": "Actif",
@@ -147,14 +158,43 @@
       "title": "Paramètres de {{model}}",
       "noSettingsNeeded": "Ce modèle fonctionne automatiquement sans configuration nécessaire."
     },
+    "longAudioModel": {
+      "title": "Modèle pour les longs enregistrements",
+      "description": "Basculer automatiquement vers un autre modèle lorsque la durée de l'enregistrement dépasse le seuil.",
+      "modelLabel": "Modèle pour les longs enregistrements",
+      "modelDescription": "Sélectionnez le modèle à utiliser pour les enregistrements plus longs que le seuil.",
+      "thresholdLabel": "Seuil de durée (secondes)",
+      "thresholdDescription": "Basculer vers le modèle longue durée lorsque l'enregistrement dépasse cette durée.",
+      "disabled": "Désactivé",
+      "seconds": "{{value}}s"
+    },
     "models": {
       "title": "Modèles de Transcription",
       "description": "Sélectionnez un modèle de transcription ou téléchargez des modèles supplémentaires. Différents modèles offrent différents niveaux de précision et de vitesse.",
       "downloaded": "Téléchargés",
       "available": "Disponibles au Téléchargement",
+      "tabs": {
+        "transcription": "Transcription",
+        "processing": "Traitement"
+      },
       "deleteConfirm": "Êtes-vous sûr de vouloir supprimer {{modelName}} ? Vous devrez le télécharger à nouveau pour l'utiliser.",
       "deleteActiveConfirm": "{{modelName}} est votre modèle actif. Le supprimer arrêtera les transcriptions jusqu'à ce que vous sélectionniez un nouveau modèle. Êtes-vous sûr ?",
       "deleteTitle": "Supprimer le modèle",
+      "processingModels": {
+        "title": "Modèles de traitement",
+        "description": "Enregistrez des modèles LLM à utiliser dans les actions de post-traitement.",
+        "noModels": "Aucun modèle de traitement enregistré. Ajoutez-en un pour l'utiliser dans vos actions.",
+        "addModel": "Ajouter un modèle de traitement",
+        "provider": "Fournisseur",
+        "apiKey": "Clé API",
+        "apiKeyPlaceholder": "Entrez la clé API",
+        "model": "Modèle",
+        "modelPlaceholder": "Sélectionner ou saisir un modèle",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "fetchModels": "Récupérer les modèles",
+        "alreadySaved": "Ce modèle est déjà enregistré."
+      },
       "filters": {
         "all": "Tous",
         "multiLanguage": "Multilingue",
@@ -246,7 +286,8 @@
         "output": "Sortie",
         "transcription": "Transcription",
         "history": "Historique",
-        "experimental": "Expérimental"
+        "experimental": "Expérimental",
+        "cloudModels": "Modèles Cloud"
       },
       "experimentalToggle": {
         "label": "Fonctionnalités Expérimentales",
@@ -398,7 +439,42 @@
         "cancel": "Annuler",
         "selectToEdit": "Sélectionnez un prompt ci-dessus pour voir et modifier ses détails.",
         "createFirst": "Cliquez sur 'Créer un nouveau prompt' ci-dessus pour créer votre premier prompt de post-traitement."
+      },
+      "actions": {
+        "title": "Actions",
+        "description": "Associez des touches Ctrl+chiffre (1-9) à des prompts personnalisés. Appuyez sur un raccourci pendant l'enregistrement pour appliquer l'action après la transcription.",
+        "noActions": "Aucune action configurée.",
+        "createFirst": "Créez votre première action pour traiter les transcriptions avec votre fournisseur configuré.",
+        "addAction": "Ajouter une action",
+        "editAction": "Modifier l'action",
+        "key": "Touche",
+        "keyLabel": "Touche (1-9)",
+        "name": "Nom",
+        "namePlaceholder": "Ex. Mode email",
+        "prompt": "Prompt",
+        "promptPlaceholder": "Ex. Formate ce texte comme un email professionnel avec salutation et signature. Ajoute des sauts de ligne entre les paragraphes.",
+        "promptTip": "Astuce : Utilisez <code>${output}</code> pour insérer le texte transcrit dans votre prompt.",
+        "model": "Modèle (optionnel)",
+        "modelPlaceholder": "Sélectionner un modèle",
+        "modelTip": "Sélectionnez un modèle spécifique pour cette action, ou utilisez celui de la section API.",
+        "defaultModel": "Par défaut",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "delete": "Supprimer",
+        "maxActionsReached": "Maximum de 9 actions atteint."
       }
+    },
+    "gemini": {
+      "title": "API Gemini",
+      "description": "Utilisez l'API Gemini de Google pour la transcription cloud. Nécessite une clé API.",
+      "apiKey": "Clé API",
+      "apiKeyPlaceholder": "Entrez votre clé API Gemini",
+      "model": "Modèle",
+      "modelDescription": "Sélectionnez le modèle Gemini à utiliser pour la transcription",
+      "apiKeyRequired": "Clé API requise",
+      "apiKeyRequiredDescription": "Entrez votre clé API Google Gemini pour utiliser la transcription cloud.",
+      "save": "Enregistrer",
+      "cancel": "Annuler"
     },
     "history": {
       "title": "Historique",
@@ -406,13 +482,17 @@
       "loading": "Chargement de l'historique...",
       "empty": "Pas encore de transcriptions. Commencez à enregistrer pour créer votre historique !",
       "copyToClipboard": "Copier la transcription dans le presse-papiers",
+      "copyFailed": "Échec de la copie de la transcription.",
       "save": "Enregistrer la transcription",
       "unsave": "Retirer des favoris",
       "delete": "Supprimer l'entrée",
       "deleteError": "Échec de la suppression de l'entrée. Veuillez réessayer.",
       "originalTranscript": "Original",
       "postProcessed": "Post-traitement",
-      "action": "Action {{key}}"
+      "action": "Action {{key}}",
+      "reprocess": "Retraiter avec un autre modèle",
+      "reprocessing": "Retraitement en cours...",
+      "selectModel": "Sélectionner un modèle"
     },
     "debug": {
       "title": "Débogage",
@@ -576,7 +656,10 @@
   "overlay": {
     "transcribing": "Transcription...",
     "processing": "Traitement...",
-    "cancelConfirm": "Esc pour annuler"
+    "cancelConfirm": "Appuyer à nouveau sur Esc pour annuler",
+    "pauseRecording": "Mettre en pause l'enregistrement",
+    "resumeRecording": "Reprendre l'enregistrement",
+    "cancelRecording": "Annuler l'enregistrement"
   },
   "auth": {
     "trialBadge": "7 jours d'essai gratuit, sans carte",
@@ -646,5 +729,12 @@
       "invalidResetCode": "Code invalide ou expiré.",
       "wrongOldPassword": "Le mot de passe actuel est incorrect."
     }
+  },
+  "warnings": {
+    "whisperGpuUnavailable": "GPU indisponible — exécution sur CPU",
+    "whisperGpuUnavailableDesc": "La transcription risque d'être lente. Passe à Parakeet V3 pour de meilleures performances.",
+    "pasteFailed": "Échec du collage automatique",
+    "pasteFailedCopied": "Échec du collage automatique — texte copié dans le presse-papiers",
+    "pasteFailedDesc": "Raison : {{reason}}"
   }
 }

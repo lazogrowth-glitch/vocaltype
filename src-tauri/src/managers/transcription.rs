@@ -25,10 +25,21 @@ use transcribe_rs::{
             Language as SenseVoiceLanguage, SenseVoiceEngine, SenseVoiceInferenceParams,
             SenseVoiceModelParams,
         },
-        whisper::{WhisperEngine, WhisperInferenceParams},
+        whisper::{WhisperEngine, WhisperInferenceParams, WhisperModelParams},
     },
     TranscriptionEngine,
 };
+
+const PARAKEET_V3_LEGACY_ID: &str = "parakeet-tdt-0.6b-v3";
+const PARAKEET_V3_ENGLISH_ID: &str = "parakeet-tdt-0.6b-v3-english";
+const PARAKEET_V3_MULTILINGUAL_ID: &str = "parakeet-tdt-0.6b-v3-multilingual";
+
+fn is_parakeet_v3_model(model_id: &str) -> bool {
+    matches!(
+        model_id,
+        PARAKEET_V3_LEGACY_ID | PARAKEET_V3_ENGLISH_ID | PARAKEET_V3_MULTILINGUAL_ID
+    )
+}
 
 #[derive(Clone, Debug, Serialize)]
 pub struct ModelStateEvent {
@@ -62,6 +73,29 @@ pub struct TranscriptionManager {
 }
 
 impl TranscriptionManager {
+    fn recommended_whisper_threads() -> i32 {
+        let available = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4);
+        available.min(8) as i32
+    }
+
+    fn whisper_model_params() -> WhisperModelParams {
+        WhisperModelParams {
+            use_gpu: true,
+            // Flash Attention: ~30-50% faster on GPU (Metal/Vulkan).
+            // Incompatible with DTW word-level timestamps (we don't use those).
+            flash_attn: true,
+        }
+    }
+
+    fn should_apply_text_filter(model_id: Option<&str>) -> bool {
+        match model_id {
+            Some(id) => !is_parakeet_v3_model(id),
+            None => true,
+        }
+    }
+
     pub fn new(app_handle: &AppHandle, model_manager: Arc<ModelManager>) -> Result<Self> {
         let manager = Self {
             engine: Arc::new(Mutex::new(None)),
@@ -216,6 +250,15 @@ impl TranscriptionManager {
         let load_start = std::time::Instant::now();
         debug!("Starting to load model: {}", model_id);
 
+        if self.get_current_model().as_deref() == Some(model_id) && self.is_model_loaded() {
+            debug!("Model {} is already loaded, skipping reload", model_id);
+            return Ok(());
+        }
+
+        if self.is_model_loaded() {
+            self.unload_model()?;
+        }
+
         // Emit loading started event
         let _ = self.app_handle.emit(
             "model-state-changed",
@@ -256,23 +299,82 @@ impl TranscriptionManager {
         let loaded_engine = match model_info.engine_type {
             EngineType::Whisper => {
                 let mut engine = WhisperEngine::new();
-                engine.load_model(&model_path).map_err(|e| {
-                    let error_msg = format!("Failed to load whisper model {}: {}", model_id, e);
-                    let _ = self.app_handle.emit(
-                        "model-state-changed",
-                        ModelStateEvent {
-                            event_type: "loading_failed".to_string(),
-                            model_id: Some(model_id.to_string()),
-                            model_name: Some(model_info.name.clone()),
-                            error: Some(error_msg.clone()),
-                        },
-                    );
-                    anyhow::anyhow!(error_msg)
-                })?;
+                let model_params = Self::whisper_model_params();
+                let use_gpu = model_params.use_gpu;
+                let gpu_backend = if use_gpu {
+                    #[cfg(target_os = "windows")]
+                    {
+                        "CPU+OpenMP"
+                    }
+                    #[cfg(target_os = "macos")]
+                    {
+                        "Metal"
+                    }
+                    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+                    {
+                        "Vulkan"
+                    }
+                } else {
+                    "CPU"
+                };
+                info!(
+                    "Loading Whisper model '{}' — GPU backend: {} (use_gpu={})",
+                    model_id, gpu_backend, model_params.use_gpu
+                );
+                let load_result = engine.load_model_with_params(&model_path, model_params);
+                match load_result {
+                    Ok(()) => {}
+                    Err(ref e) if use_gpu => {
+                        warn!(
+                            "GPU ({}) init failed for '{}': {}. Retrying with CPU fallback.",
+                            gpu_backend, model_id, e
+                        );
+                        let cpu_params = WhisperModelParams {
+                            use_gpu: false,
+                            flash_attn: false,
+                        };
+                        engine
+                            .load_model_with_params(&model_path, cpu_params)
+                            .map_err(|e2| {
+                                let error_msg =
+                                    format!("Failed to load whisper model {}: {}", model_id, e2);
+                                let _ = self.app_handle.emit(
+                                    "model-state-changed",
+                                    ModelStateEvent {
+                                        event_type: "loading_failed".to_string(),
+                                        model_id: Some(model_id.to_string()),
+                                        model_name: Some(model_info.name.clone()),
+                                        error: Some(error_msg.clone()),
+                                    },
+                                );
+                                anyhow::anyhow!(error_msg)
+                            })?;
+                        let _ = self
+                            .app_handle
+                            .emit("whisper-gpu-unavailable", model_id.to_string());
+                        warn!(
+                            "Whisper '{}' loaded on CPU — transcription will be slow. Consider switching to Parakeet V3.",
+                            model_id
+                        );
+                    }
+                    Err(e) => {
+                        let error_msg = format!("Failed to load whisper model {}: {}", model_id, e);
+                        let _ = self.app_handle.emit(
+                            "model-state-changed",
+                            ModelStateEvent {
+                                event_type: "loading_failed".to_string(),
+                                model_id: Some(model_id.to_string()),
+                                model_name: Some(model_info.name.clone()),
+                                error: Some(error_msg.clone()),
+                            },
+                        );
+                        return Err(anyhow::anyhow!(error_msg));
+                    }
+                }
                 LoadedEngine::Whisper(engine)
             }
             EngineType::Parakeet => {
-                if model_id == "parakeet-tdt-0.6b-v3" {
+                if is_parakeet_v3_model(model_id) {
                     let engine = ParakeetTDT::from_pretrained(&model_path, None).map_err(|e| {
                         let error_msg =
                             format!("Failed to load Parakeet V3 model {}: {}", model_id, e);
@@ -496,6 +598,7 @@ impl TranscriptionManager {
 
         // Get current settings for configuration
         let settings = get_settings(&self.app_handle);
+        let active_model_id = self.get_current_model();
 
         // Handle Gemini API separately (requires async HTTP call)
         {
@@ -580,6 +683,15 @@ impl TranscriptionManager {
                         let params = WhisperInferenceParams {
                             language: whisper_language,
                             translate: settings.translate_to_english,
+                            greedy_best_of: Some(1),
+                            n_threads: Some(Self::recommended_whisper_threads()),
+                            debug_mode: false,
+                            // Skip timestamp computation — we only need raw text.
+                            // This alone saves ~10-20% of inference time.
+                            no_timestamps: true,
+                            // Treat the full clip as one segment — avoids per-segment
+                            // overhead. Safe for push-to-talk dictation clips.
+                            single_segment: true,
                             ..Default::default()
                         };
 
@@ -600,11 +712,23 @@ impl TranscriptionManager {
                     }
                     LoadedEngine::ParakeetV3(parakeet_engine) => parakeet_engine
                         .transcribe_samples(
-                            audio,
+                            audio.clone(),
                             16_000,
                             1,
                             Some(ParakeetTimestampMode::Sentences),
                         )
+                        .or_else(|sentence_err| {
+                            debug!(
+                                "Parakeet V3 sentence-mode decode failed, retrying with word mode: {}",
+                                sentence_err
+                            );
+                            parakeet_engine.transcribe_samples(
+                                audio,
+                                16_000,
+                                1,
+                                Some(ParakeetTimestampMode::Words),
+                            )
+                        })
                         .map(|result| result.text)
                         .map_err(|e| anyhow::anyhow!("Parakeet V3 transcription failed: {}", e)),
                     LoadedEngine::Moonshine(moonshine_engine) => moonshine_engine
@@ -701,8 +825,12 @@ impl TranscriptionManager {
             result
         };
 
-        // Filter out filler words and hallucinations
-        let filtered_result = filter_transcription_output(&corrected_result);
+        // Keep Parakeet V3 text as-is to avoid removing valid multilingual output.
+        let filtered_result = if Self::should_apply_text_filter(active_model_id.as_deref()) {
+            filter_transcription_output(&corrected_result)
+        } else {
+            corrected_result
+        };
 
         let et = std::time::Instant::now();
         let translation_note = if settings.translate_to_english {

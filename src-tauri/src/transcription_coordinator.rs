@@ -1,6 +1,7 @@
 use crate::actions::{ActiveActionState, ACTION_MAP};
 use crate::managers::audio::AudioRecordingManager;
 use crate::overlay::{emit_action_deselected, emit_action_selected};
+use crate::runtime_observability::{emit_lifecycle_state, TranscriptionLifecycleState};
 use crate::settings::get_settings;
 use log::{debug, error, warn};
 use std::sync::mpsc::{self, Sender};
@@ -23,6 +24,7 @@ enum Command {
         recording_was_active: bool,
     },
     ProcessingFinished,
+    EnterProcessing,
     SelectAction {
         key: u8,
     },
@@ -125,10 +127,31 @@ impl TranscriptionCoordinator {
                                     || matches!(stage, Stage::Recording { .. }))
                             {
                                 stage = Stage::Idle;
+                                emit_lifecycle_state(
+                                    &app,
+                                    TranscriptionLifecycleState::Idle,
+                                    None,
+                                    Some("cancelled"),
+                                );
                             }
                         }
                         Command::ProcessingFinished => {
                             stage = Stage::Idle;
+                            emit_lifecycle_state(
+                                &app,
+                                TranscriptionLifecycleState::Idle,
+                                None,
+                                Some("processing-finished"),
+                            );
+                        }
+                        Command::EnterProcessing => {
+                            stage = Stage::Processing;
+                            emit_lifecycle_state(
+                                &app,
+                                TranscriptionLifecycleState::Processing,
+                                None,
+                                Some("post-process"),
+                            );
                         }
                         Command::SelectAction { key } => {
                             if let Stage::Recording {
@@ -207,6 +230,12 @@ impl TranscriptionCoordinator {
         }
     }
 
+    pub fn notify_enter_processing(&self) {
+        if self.tx.send(Command::EnterProcessing).is_err() {
+            warn!("Transcription coordinator channel closed");
+        }
+    }
+
     pub fn select_action(&self, key: u8) {
         if self.tx.send(Command::SelectAction { key }).is_err() {
             warn!("Transcription coordinator channel closed");
@@ -228,6 +257,12 @@ fn start(app: &AppHandle, stage: &mut Stage, binding_id: &str, hotkey_string: &s
             binding_id: binding_id.to_string(),
             selected_action: None,
         };
+        emit_lifecycle_state(
+            app,
+            TranscriptionLifecycleState::Recording,
+            Some(binding_id),
+            Some("recording-started"),
+        );
     } else {
         debug!("Start for '{binding_id}' did not begin recording; staying idle");
     }
@@ -250,4 +285,10 @@ fn stop(app: &AppHandle, stage: &mut Stage, binding_id: &str, hotkey_string: &st
     };
     action.stop(app, binding_id, hotkey_string);
     *stage = Stage::Processing;
+    emit_lifecycle_state(
+        app,
+        TranscriptionLifecycleState::Transcribing,
+        Some(binding_id),
+        Some("recording-stopped"),
+    );
 }

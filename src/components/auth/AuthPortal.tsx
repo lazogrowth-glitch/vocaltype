@@ -89,7 +89,7 @@ export const AuthPortal = ({
   onLogout,
 }: AuthPortalProps) => {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<Mode>("register");
+  const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -721,6 +721,7 @@ export const AuthPortal = ({
                     className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
                     onChange={(event) => setEmail(event.target.value)}
                     placeholder={t("auth.fields.emailPlaceholder")}
+                    required
                     type="email"
                     value={email}
                   />
@@ -737,6 +738,7 @@ export const AuthPortal = ({
                     className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
                     onChange={(event) => setPassword(event.target.value)}
                     placeholder={t("auth.fields.passwordPlaceholder")}
+                    required
                     type="password"
                     value={password}
                   />

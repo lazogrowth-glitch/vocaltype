@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 export interface DropdownOption {
@@ -28,7 +28,33 @@ export const Dropdown: React.FC<DropdownProps> = ({
 }) => {
   const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
+  const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listboxId = useId();
+
+  const getInitialHighlightIndex = useCallback(() => {
+    const selectedIndex = options.findIndex(
+      (option) => option.value === selectedValue && !option.disabled,
+    );
+    if (selectedIndex >= 0) {
+      return selectedIndex;
+    }
+
+    return options.findIndex((option) => !option.disabled);
+  }, [options, selectedValue]);
+
+  const openDropdown = useCallback(() => {
+    if (disabled) return;
+    if (onRefresh) onRefresh();
+    setIsOpen(true);
+    setHighlightedIndex(getInitialHighlightIndex());
+  }, [disabled, getInitialHighlightIndex, onRefresh]);
+
+  const closeDropdown = useCallback(() => {
+    setIsOpen(false);
+    setHighlightedIndex(-1);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -36,12 +62,23 @@ export const Dropdown: React.FC<DropdownProps> = ({
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node)
       ) {
-        setIsOpen(false);
+        closeDropdown();
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
+  }, [closeDropdown]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    setHighlightedIndex((prev) => {
+      if (prev >= 0 && options[prev] && !options[prev].disabled) {
+        return prev;
+      }
+      return getInitialHighlightIndex();
+    });
+  }, [getInitialHighlightIndex, isOpen, options]);
 
   const selectedOption = options.find(
     (option) => option.value === selectedValue,
@@ -49,18 +86,96 @@ export const Dropdown: React.FC<DropdownProps> = ({
 
   const handleSelect = (value: string) => {
     onSelect(value);
-    setIsOpen(false);
+    closeDropdown();
   };
 
   const handleToggle = () => {
     if (disabled) return;
-    if (!isOpen && onRefresh) onRefresh();
-    setIsOpen(!isOpen);
+    if (isOpen) {
+      closeDropdown();
+      return;
+    }
+    openDropdown();
+  };
+
+  const moveHighlight = (direction: 1 | -1) => {
+    if (options.length === 0) return;
+
+    setHighlightedIndex((prev) => {
+      let currentIndex = prev;
+
+      if (
+        currentIndex < 0 ||
+        currentIndex >= options.length ||
+        options[currentIndex]?.disabled
+      ) {
+        currentIndex = getInitialHighlightIndex();
+        if (currentIndex < 0) return -1;
+      }
+
+      for (let i = 1; i <= options.length; i++) {
+        const next =
+          (currentIndex + direction * i + options.length) % options.length;
+        if (!options[next]?.disabled) {
+          return next;
+        }
+      }
+
+      return currentIndex;
+    });
+  };
+
+  const handleTriggerKeyDown = (
+    event: React.KeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (disabled) return;
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      if (!isOpen) {
+        openDropdown();
+        return;
+      }
+      moveHighlight(1);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      if (!isOpen) {
+        openDropdown();
+        return;
+      }
+      moveHighlight(-1);
+      return;
+    }
+
+    if (event.key === "Enter" || event.key === " ") {
+      if (!isOpen) {
+        event.preventDefault();
+        openDropdown();
+        return;
+      }
+
+      const highlightedOption = options[highlightedIndex];
+      if (highlightedOption && !highlightedOption.disabled) {
+        event.preventDefault();
+        handleSelect(highlightedOption.value);
+      }
+      return;
+    }
+
+    if (event.key === "Escape" && isOpen) {
+      event.preventDefault();
+      closeDropdown();
+      triggerRef.current?.focus();
+    }
   };
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button
+        ref={triggerRef}
         type="button"
         className={`px-2 py-1 text-sm font-semibold bg-mid-gray/10 border border-mid-gray/80 rounded-md min-w-[200px] text-start flex items-center justify-between transition-all duration-150 ${
           disabled
@@ -68,7 +183,11 @@ export const Dropdown: React.FC<DropdownProps> = ({
             : "hover:bg-logo-primary/10 cursor-pointer hover:border-logo-primary"
         }`}
         onClick={handleToggle}
+        onKeyDown={handleTriggerKeyDown}
         disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        aria-controls={listboxId}
       >
         <span className="truncate">{selectedOption?.label || placeholder}</span>
         <svg
@@ -86,13 +205,17 @@ export const Dropdown: React.FC<DropdownProps> = ({
         </svg>
       </button>
       {isOpen && !disabled && (
-        <div className="absolute top-full left-0 right-0 mt-1 bg-background border border-mid-gray/80 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+        <div
+          id={listboxId}
+          role="listbox"
+          className="absolute top-full left-0 right-0 mt-1 bg-background border border-mid-gray/80 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto"
+        >
           {options.length === 0 ? (
             <div className="px-2 py-1 text-sm text-mid-gray">
               {t("common.noOptionsFound")}
             </div>
           ) : (
-            options.map((option) => (
+            options.map((option, index) => (
               <button
                 key={option.value}
                 type="button"
@@ -100,9 +223,14 @@ export const Dropdown: React.FC<DropdownProps> = ({
                   selectedValue === option.value
                     ? "bg-logo-primary/20 font-semibold"
                     : ""
+                } ${
+                  highlightedIndex === index ? "bg-logo-primary/10" : ""
                 } ${option.disabled ? "opacity-50 cursor-not-allowed" : ""}`}
                 onClick={() => handleSelect(option.value)}
+                onMouseEnter={() => setHighlightedIndex(index)}
                 disabled={option.disabled}
+                role="option"
+                aria-selected={selectedValue === option.value}
               >
                 <span className="truncate">{option.label}</span>
               </button>

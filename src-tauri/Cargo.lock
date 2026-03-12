@@ -4198,8 +4198,6 @@ dependencies = [
 [[package]]
 name = "parakeet-rs"
 version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1916466aa7cfc0dda3c855d10b91edb466e9bfdcd9e765c3db5041d737f260c9"
 dependencies = [
  "eyre",
  "hound",
@@ -4924,7 +4922,7 @@ dependencies = [
 [[package]]
 name = "rdev"
 version = "0.5.0-2"
-source = "git+https://github.com/rustdesk-org/rdev#a90dbe1172f8832f54c97c62e823c5a34af5fdfe"
+source = "git+https://github.com/rustdesk-org/rdev?rev=a90dbe1172f8832f54c97c62e823c5a34af5fdfe#a90dbe1172f8832f54c97c62e823c5a34af5fdfe"
 dependencies = [
  "cocoa 0.24.1",
  "core-foundation 0.9.4",
@@ -5229,7 +5227,7 @@ dependencies = [
 [[package]]
 name = "rodio"
 version = "0.20.1"
-source = "git+https://github.com/cjpais/rodio.git#fed30292db417cb95305c118c0e1d804fb74cbff"
+source = "git+https://github.com/cjpais/rodio.git?rev=fed30292db417cb95305c118c0e1d804fb74cbff#fed30292db417cb95305c118c0e1d804fb74cbff"
 dependencies = [
  "cpal",
  "dasp_sample",
@@ -7283,8 +7281,6 @@ dependencies = [
 [[package]]
 name = "transcribe-rs"
 version = "0.2.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f6fe25a69f6aa6ca4a8cb1dfc201e94c4cc7acb43f69353aa9ebb6aa4d0d26a9"
 dependencies = [
  "base64 0.22.1",
  "derive_builder",
@@ -7554,7 +7550,7 @@ dependencies = [
 [[package]]
 name = "vad-rs"
 version = "0.1.5"
-source = "git+https://github.com/cjpais/vad-rs#88b3a01f72f83a5d80d0e7ea9bacfc0d897fd03f"
+source = "git+https://github.com/cjpais/vad-rs?rev=88b3a01f72f83a5d80d0e7ea9bacfc0d897fd03f#88b3a01f72f83a5d80d0e7ea9bacfc0d897fd03f"
 dependencies = [
  "eyre",
  "ndarray",

@@ -4,6 +4,7 @@ pub mod history;
 pub mod models;
 pub mod transcription;
 
+use crate::runtime_observability::{collect_runtime_diagnostics, RuntimeDiagnostics};
 use crate::settings::{get_settings, write_settings, AppSettings, LogLevel};
 use crate::utils::cancel_current_operation;
 use tauri::{AppHandle, Manager};
@@ -223,5 +224,22 @@ pub fn initialize_shortcuts(app: AppHandle) -> Result<(), String> {
     app.manage(ShortcutsInitialized);
 
     log::info!("Shortcuts initialized successfully");
+    Ok(())
+}
+
+#[specta::specta]
+#[tauri::command]
+pub fn get_runtime_diagnostics(app: AppHandle) -> Result<RuntimeDiagnostics, String> {
+    Ok(collect_runtime_diagnostics(&app))
+}
+
+#[specta::specta]
+#[tauri::command]
+pub fn export_runtime_diagnostics(app: AppHandle, path: String) -> Result<(), String> {
+    let diagnostics = collect_runtime_diagnostics(&app);
+    let json = serde_json::to_string_pretty(&diagnostics)
+        .map_err(|e| format!("Failed to serialize runtime diagnostics: {}", e))?;
+    std::fs::write(&path, json).map_err(|e| format!("Failed to write diagnostics file: {}", e))?;
+    log::info!("Runtime diagnostics exported to {}", path);
     Ok(())
 }

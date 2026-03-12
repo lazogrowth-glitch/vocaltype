@@ -16,6 +16,7 @@ mod tauri_impl;
 use log::{error, info, warn};
 use serde::Serialize;
 use specta::Type;
+use std::collections::HashSet;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
@@ -99,18 +100,7 @@ pub fn unregister_pause_shortcut(app: &AppHandle) {
 /// Register action shortcuts for configured actions (called when recording starts)
 pub fn register_action_shortcuts(app: &AppHandle) {
     let settings = get_settings(app);
-    for action in &settings.post_process_actions {
-        if action.key < 1 || action.key > 9 {
-            continue;
-        }
-        let shortcut_str = format!("ctrl+{}", action.key);
-        let binding = ShortcutBinding {
-            id: format!("action_{}", action.key),
-            name: action.name.clone(),
-            description: format!("Action {}", action.key),
-            default_binding: shortcut_str.clone(),
-            current_binding: shortcut_str,
-        };
+    for binding in action_shortcut_bindings(&settings) {
         match settings.keyboard_implementation {
             KeyboardImplementation::Tauri => {
                 tauri_impl::register_action_shortcut(app, binding);
@@ -125,15 +115,7 @@ pub fn register_action_shortcuts(app: &AppHandle) {
 /// Unregister all action shortcuts (called when recording stops)
 pub fn unregister_action_shortcuts(app: &AppHandle) {
     let settings = get_settings(app);
-    for key in 1..=9u8 {
-        let shortcut_str = format!("ctrl+{}", key);
-        let binding = ShortcutBinding {
-            id: format!("action_{}", key),
-            name: String::new(),
-            description: String::new(),
-            default_binding: shortcut_str.clone(),
-            current_binding: shortcut_str,
-        };
+    for binding in action_shortcut_bindings(&settings) {
         match settings.keyboard_implementation {
             KeyboardImplementation::Tauri => {
                 tauri_impl::unregister_action_shortcut(app, binding);
@@ -143,6 +125,27 @@ pub fn unregister_action_shortcuts(app: &AppHandle) {
             }
         }
     }
+}
+
+fn action_shortcut_bindings(settings: &settings::AppSettings) -> Vec<ShortcutBinding> {
+    let mut seen = HashSet::new();
+    settings
+        .post_process_actions
+        .iter()
+        .filter_map(|action| {
+            if action.key < 1 || action.key > 9 || !seen.insert(action.key) {
+                return None;
+            }
+            let shortcut_str = format!("ctrl+{}", action.key);
+            Some(ShortcutBinding {
+                id: format!("action_{}", action.key),
+                name: action.name.clone(),
+                description: format!("Action {}", action.key),
+                default_binding: shortcut_str.clone(),
+                current_binding: shortcut_str,
+            })
+        })
+        .collect()
 }
 
 /// Register a shortcut using the appropriate implementation

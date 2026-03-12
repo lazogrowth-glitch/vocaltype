@@ -52,6 +52,14 @@
         "name": "Parakeet V3",
         "description": "Ruta ONNX multilingue experimental. Es rapido, pero ahora mismo es menos fiable que Whisper para frances exigente y dictado con idiomas mezclados."
       },
+      "parakeet-tdt-0.6b-v3-english": {
+        "name": "Parakeet V3 English",
+        "description": "English-first Parakeet profile. Full-context decoding (no segmentation) for top speed and stability in English."
+      },
+      "parakeet-tdt-0.6b-v3-multilingual": {
+        "name": "Parakeet V3 Multilingual",
+        "description": "Multilingual experimental profile tuned for French and non-English dictation with short segmented decoding."
+      },
       "moonshine-base": {
         "name": "Moonshine Base",
         "description": "Modelo muy rapido solo para ingles. Util para transcripcion local ligera, pero no es de primera linea en precision."
@@ -139,7 +147,10 @@
       "bestDefault": "Mejor opcion por defecto",
       "bestQuality": "Mejor calidad",
       "fastEnglish": "Ingles rapido",
-      "experimental": "Experimental"
+      "experimental": "Experimental",
+      "english": "English",
+      "englishOnly": "English Only",
+      "multilingualExperimental": "Multilingual Experimental"
     }
   },
   "settings": {
@@ -163,7 +174,26 @@
       },
       "noModelsMatch": "Ningún modelo coincide con este filtro.",
       "yourModels": "Modelos descargados",
-      "availableModels": "Disponibles para descargar"
+      "availableModels": "Disponibles para descargar",
+      "tabs": {
+        "transcription": "Transcription",
+        "processing": "Processing"
+      },
+      "processingModels": {
+        "title": "Processing Models",
+        "description": "Save LLM models for use in post-processing actions.",
+        "noModels": "No processing models saved yet. Add one to use in your actions.",
+        "addModel": "Add Processing Model",
+        "provider": "Provider",
+        "apiKey": "API Key",
+        "apiKeyPlaceholder": "Enter API key",
+        "model": "Model",
+        "modelPlaceholder": "Select or type a model",
+        "save": "Save",
+        "cancel": "Cancel",
+        "fetchModels": "Fetch models",
+        "alreadySaved": "This model is already saved."
+      }
     },
     "general": {
       "title": "General",
@@ -246,7 +276,8 @@
         "output": "Salida",
         "transcription": "Transcripción",
         "history": "Historial",
-        "experimental": "Experimental"
+        "experimental": "Experimental",
+        "cloudModels": "Cloud Models"
       },
       "experimentalToggle": {
         "label": "Funciones Experimentales",
@@ -398,6 +429,29 @@
         "cancel": "Cancelar",
         "selectToEdit": "Selecciona un prompt arriba para ver y editar sus detalles.",
         "createFirst": "Haz clic en 'Crear Nuevo Prompt' arriba para crear tu primer prompt de post procesamiento."
+      },
+      "actions": {
+        "title": "Actions",
+        "description": "Bind Ctrl+number keys (1-9) to custom prompts. Press a shortcut during recording to apply the action after transcription.",
+        "noActions": "No actions configured yet.",
+        "createFirst": "Create your first action to process transcriptions with your configured provider.",
+        "addAction": "Add Action",
+        "editAction": "Edit Action",
+        "key": "Key",
+        "keyLabel": "Key (1-9)",
+        "name": "Name",
+        "namePlaceholder": "e.g. Email mode",
+        "prompt": "Prompt",
+        "promptPlaceholder": "e.g. Format this as a professional email with greeting and sign-off. Add line breaks between paragraphs.",
+        "promptTip": "Tip: Use <code>${output}</code> to insert the transcribed text in your prompt.",
+        "model": "Model (optional)",
+        "modelPlaceholder": "Select a model",
+        "modelTip": "Select a specific model for this action, or use the default from the API section.",
+        "defaultModel": "Default",
+        "save": "Save",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "maxActionsReached": "Maximum of 9 actions reached."
       }
     },
     "history": {
@@ -409,7 +463,14 @@
       "save": "Guardar transcripción",
       "unsave": "Eliminar de guardados",
       "delete": "Eliminar entrada",
-      "deleteError": "Error al eliminar la entrada. Por favor, intenta de nuevo."
+      "deleteError": "Error al eliminar la entrada. Por favor, intenta de nuevo.",
+      "copyFailed": "Failed to copy transcription.",
+      "reprocess": "Reprocess with different model",
+      "reprocessing": "Reprocessing...",
+      "selectModel": "Select model",
+      "originalTranscript": "Original",
+      "postProcessed": "Post-processed",
+      "action": "Action {{key}}"
     },
     "debug": {
       "title": "Depuración",
@@ -510,7 +571,37 @@
           "description": "Inferencia de alto rendimiento del modelo de reconocimiento automático de voz Whisper de OpenAI",
           "details": "VocalType usa Whisper.cpp para procesamiento de voz a texto rápido y local. Gracias al increíble trabajo de Georgi Gerganov y colaboradores."
         }
+      },
+      "exportImport": {
+        "title": "Export / Import Settings",
+        "description": "Transfer your configuration to another computer",
+        "export": "Export",
+        "import": "Import",
+        "exportSuccess": "Settings exported successfully",
+        "importSuccess": "Settings imported successfully"
       }
+    },
+    "longAudioModel": {
+      "title": "Long Audio Model",
+      "description": "Automatically switch to a different model when recording duration exceeds the threshold.",
+      "modelLabel": "Model for long recordings",
+      "modelDescription": "Select a model to use for recordings longer than the threshold.",
+      "thresholdLabel": "Duration threshold (seconds)",
+      "thresholdDescription": "Switch to the long audio model when recording exceeds this duration.",
+      "disabled": "Disabled",
+      "seconds": "{{value}}s"
+    },
+    "gemini": {
+      "title": "Gemini API",
+      "description": "Use Google's Gemini API for cloud-based transcription. Requires an API key.",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "Enter your Gemini API key",
+      "model": "Model",
+      "modelDescription": "Select which Gemini model to use for transcription",
+      "apiKeyRequired": "API Key Required",
+      "apiKeyRequiredDescription": "Enter your Google Gemini API key to use cloud transcription.",
+      "save": "Save",
+      "cancel": "Cancel"
     }
   },
   "footer": {
@@ -565,6 +656,85 @@
   "overlay": {
     "transcribing": "Transcribiendo...",
     "processing": "Procesando...",
-    "cancelConfirm": "Esc para cancelar"
+    "cancelConfirm": "Esc para cancelar",
+    "pauseRecording": "Pause recording",
+    "resumeRecording": "Resume recording",
+    "cancelRecording": "Cancel recording"
+  },
+  "auth": {
+    "trialBadge": "7-day free trial, no card required",
+    "paidAccess": "Paid access",
+    "headline": "Create your account and unlock VocalType instantly.",
+    "subheadline": "Every account starts with a 7-day free trial without requiring a card. After the trial ends, users can subscribe for $4.99 per month to keep unlimited dictation across ChatGPT, Claude, Gemini and Windows apps.",
+    "features": {
+      "trial": {
+        "title": "7-day free trial",
+        "description": "Create an account and test the full product immediately, with no card required upfront."
+      },
+      "subscription": {
+        "title": "Subscription checked",
+        "description": "The desktop app verifies account access before unlocking the transcription workflow."
+      },
+      "billing": {
+        "title": "Simple billing",
+        "description": "Manage your subscription through Stripe from inside the app."
+      }
+    },
+    "createAccount": "Create account",
+    "login": "Login",
+    "loginToAccount": "Login to your account",
+    "account": "Account",
+    "unlocked": "Unlocked",
+    "locked": "Locked",
+    "subscribeNow": "Subscribe now",
+    "manageSubscription": "Manage subscription",
+    "refreshAccess": "Refresh access",
+    "logout": "Logout",
+    "trialNote": "Your 7-day free trial starts when you create your account. No card is required until the trial ends.",
+    "sessionExpired": "Your session has expired. Please log in again.",
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "Your name",
+      "email": "Email",
+      "emailPlaceholder": "you@example.com",
+      "password": "Password",
+      "passwordPlaceholder": "Minimum 6 characters"
+    },
+    "access": {
+      "active": "Subscription active",
+      "trialActive": "Free trial active",
+      "trialEndsToday": "Trial ends today",
+      "trialDaysLeft": "{{count}} days left in your free trial",
+      "canceled": "Subscription canceled",
+      "trialEnded": "Free trial ended"
+    },
+    "forgotPassword": "Forgot password?",
+    "backToLogin": "Back to login",
+    "resetPassword": "Reset password",
+    "sendCode": "Send code",
+    "verificationCode": "6-digit code",
+    "verificationCodePlaceholder": "123456",
+    "codeSent": "A 6-digit code was sent to your email address.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "passwordResetSuccess": "Password reset successfully. You are now logged in.",
+    "changePassword": "Change password",
+    "oldPassword": "Current password",
+    "passwordChanged": "Password changed successfully.",
+    "errors": {
+      "networkError": "Could not connect to the server. Please check your internet connection.",
+      "emailExistsSwitchedToLogin": "An account with this email already exists. Please log in instead.",
+      "deviceAlreadyRegistered": "An account was already created on this computer. Please log in to your existing account.",
+      "passwordsDoNotMatch": "Passwords do not match.",
+      "invalidResetCode": "Invalid or expired code.",
+      "wrongOldPassword": "Current password is incorrect."
+    }
+  },
+  "warnings": {
+    "whisperGpuUnavailable": "GPU not available — running on CPU",
+    "whisperGpuUnavailableDesc": "Transcription may be slow. Switch to Parakeet V3 for fast CPU performance.",
+    "pasteFailed": "Automatic paste failed",
+    "pasteFailedCopied": "Automatic paste failed — text copied to clipboard",
+    "pasteFailedDesc": "Reason: {{reason}}"
   }
 }

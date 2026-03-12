@@ -307,12 +307,32 @@ const RecordingOverlay: React.FC = () => {
       <div className="overlay-right">
         {state === "recording" && (
           <>
-            <div className="pause-button" onClick={handleTogglePause}>
+            <button
+              type="button"
+              className="pause-button"
+              onClick={handleTogglePause}
+              aria-label={
+                isPaused
+                  ? t("overlay.resumeRecording", {
+                      defaultValue: "Resume recording",
+                    })
+                  : t("overlay.pauseRecording", {
+                      defaultValue: "Pause recording",
+                    })
+              }
+            >
               {isPaused ? <PlayIcon /> : <PauseIcon />}
-            </div>
-            <div className="cancel-button" onClick={handleCancel}>
+            </button>
+            <button
+              type="button"
+              className="cancel-button"
+              onClick={handleCancel}
+              aria-label={t("overlay.cancelRecording", {
+                defaultValue: "Cancel recording",
+              })}
+            >
               <XIcon />
-            </div>
+            </button>
           </>
         )}
       </div>

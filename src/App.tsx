@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, useRef } from "react";
-import { Toaster } from "sonner";
+import { toast, Toaster } from "sonner";
 import { useTranslation } from "react-i18next";
 import { platform } from "@tauri-apps/plugin-os";
 import { getIdentifier } from "@tauri-apps/api/app";
@@ -20,6 +20,7 @@ import { commands } from "@/bindings";
 import { authClient } from "@/lib/auth/client";
 import type { AuthPayload, AuthSession } from "@/lib/auth/types";
 import { getLanguageDirection, initializeRTL } from "@/lib/utils/rtl";
+import type { RuntimeErrorEvent } from "@/types/runtimeObservability";
 
 type OnboardingStep = "accessibility" | "model" | "done";
 
@@ -52,6 +53,7 @@ function App() {
     (state) => state.refreshOutputDevices,
   );
   const hasCompletedPostOnboardingInit = useRef(false);
+  const lastRuntimeErrorRef = useRef<{ key: string; at: number } | null>(null);
 
   const applySession = useCallback((nextSession: AuthSession | null) => {
     setSession(nextSession);
@@ -194,6 +196,82 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const unlisten = listen<string>("whisper-gpu-unavailable", () => {
+      toast.warning(t("warnings.whisperGpuUnavailable"), {
+        duration: 8000,
+        description: t("warnings.whisperGpuUnavailableDesc"),
+      });
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
+  useEffect(() => {
+    const unlisten = listen<{
+      reason?: string;
+      copied_to_clipboard?: boolean;
+    }>("paste-failed", (event) => {
+      const copiedToClipboard = event.payload?.copied_to_clipboard ?? false;
+      toast.error(
+        copiedToClipboard
+          ? t("warnings.pasteFailedCopied")
+          : t("warnings.pasteFailed"),
+        {
+          duration: 8000,
+          description: t("warnings.pasteFailedDesc", {
+            reason: event.payload?.reason ?? "unknown error",
+          }),
+        },
+      );
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
+  useEffect(() => {
+    const unlisten = listen<RuntimeErrorEvent>("runtime-error", (event) => {
+      const payload = event.payload;
+      if (!payload) return;
+
+      const reason = `[${payload.stage}] ${payload.code}: ${payload.message}`;
+      const dedupeKey = `${payload.code}:${payload.message}`;
+      const now = Date.now();
+      const last = lastRuntimeErrorRef.current;
+
+      if (last && last.key === dedupeKey && now - last.at < 1500) {
+        return;
+      }
+
+      lastRuntimeErrorRef.current = { key: dedupeKey, at: now };
+
+      if (payload.recoverable) {
+        toast.warning(
+          t("warnings.runtimeIssue", { defaultValue: "Transcription issue" }),
+          {
+            duration: 8000,
+            description: reason,
+          },
+        );
+        return;
+      }
+
+      toast.error(
+        t("warnings.runtimeFailure", { defaultValue: "Transcription failed" }),
+        {
+          duration: 8000,
+          description: reason,
+        },
+      );
+    });
+
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t]);
+
   const checkOnboardingStatus = async () => {
     try {
       const appIdentifier = await getIdentifier();
@@ -245,25 +323,28 @@ function App() {
     setOnboardingStep("done");
   };
 
-  const authenticate = useCallback(async (
-    handler: (payload: AuthPayload) => Promise<AuthSession>,
-    payload: AuthPayload,
-  ) => {
-    setAuthSubmitting(true);
-    setAuthError(null);
+  const authenticate = useCallback(
+    async (
+      handler: (payload: AuthPayload) => Promise<AuthSession>,
+      payload: AuthPayload,
+    ) => {
+      setAuthSubmitting(true);
+      setAuthError(null);
 
-    try {
-      const nextSession = await handler(payload);
-      applySession(nextSession);
-    } catch (error) {
-      console.error("Authentication failed:", error);
-      setAuthError(
-        error instanceof Error ? error.message : "Authentication failed",
-      );
-    } finally {
-      setAuthSubmitting(false);
-    }
-  }, [applySession]);
+      try {
+        const nextSession = await handler(payload);
+        applySession(nextSession);
+      } catch (error) {
+        console.error("Authentication failed:", error);
+        setAuthError(
+          error instanceof Error ? error.message : "Authentication failed",
+        );
+      } finally {
+        setAuthSubmitting(false);
+      }
+    },
+    [applySession],
+  );
 
   const handleLogin = useCallback(
     async (payload: AuthPayload) => {
@@ -306,7 +387,14 @@ function App() {
 
   // Still checking onboarding status
   if (authLoading) {
-    return null;
+    return (
+      <div
+        dir={direction}
+        className="h-screen flex items-center justify-center text-sm text-mid-gray"
+      >
+        {t("common.loading")}
+      </div>
+    );
   }
 
   if (!session?.subscription.has_access) {
@@ -327,7 +415,14 @@ function App() {
   }
 
   if (onboardingStep === null) {
-    return null;
+    return (
+      <div
+        dir={direction}
+        className="h-screen flex items-center justify-center text-sm text-mid-gray"
+      >
+        {t("common.loading")}
+      </div>
+    );
   }
 
   if (onboardingStep === "accessibility") {
@@ -339,10 +434,7 @@ function App() {
   }
 
   return (
-    <div
-      dir={direction}
-      className="h-screen flex flex-col select-none cursor-default"
-    >
+    <div dir={direction} className="h-screen flex flex-col">
       <Toaster
         theme="system"
         toastOptions={{

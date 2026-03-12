@@ -1,5 +1,6 @@
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::transcription::TranscriptionManager;
+use crate::runtime_observability::{emit_lifecycle_state, TranscriptionLifecycleState};
 use crate::shortcut;
 use crate::TranscriptionCoordinator;
 use log::info;
@@ -40,6 +41,12 @@ pub fn cancel_current_operation(app: &AppHandle) {
     if let Some(coordinator) = app.try_state::<TranscriptionCoordinator>() {
         coordinator.notify_cancel(recording_was_active);
     }
+    emit_lifecycle_state(
+        app,
+        TranscriptionLifecycleState::Idle,
+        None,
+        Some("cancel-operation"),
+    );
 
     info!("Operation cancellation completed - returned to idle state");
 }

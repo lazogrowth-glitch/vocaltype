@@ -5,6 +5,9 @@ use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
 use crate::managers::model::{EngineType, ModelInfo, ModelManager};
 use crate::managers::transcription::TranscriptionManager;
+use crate::runtime_observability::{
+    emit_lifecycle_state, emit_runtime_error, RuntimeErrorStage, TranscriptionLifecycleState,
+};
 use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
 use crate::tray::{change_tray_icon, TrayIconState};
@@ -18,16 +21,46 @@ use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tauri::AppHandle;
-use tauri::Manager;
+use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 
 pub struct ActiveActionState(pub Mutex<Option<u8>>);
 
+#[derive(Clone, serde::Serialize)]
+struct PasteFailureEvent {
+    reason: String,
+    copied_to_clipboard: bool,
+}
+
+fn emit_paste_failed_event(app: &AppHandle, reason: impl Into<String>, copied_to_clipboard: bool) {
+    let _ = app.emit(
+        "paste-failed",
+        PasteFailureEvent {
+            reason: reason.into(),
+            copied_to_clipboard,
+        },
+    );
+}
+
 // ── Streaming chunk constants ────────────────────────────────────────────────
+const PARAKEET_V3_LEGACY_ID: &str = "parakeet-tdt-0.6b-v3";
+const PARAKEET_V3_ENGLISH_ID: &str = "parakeet-tdt-0.6b-v3-english";
+const PARAKEET_V3_MULTILINGUAL_ID: &str = "parakeet-tdt-0.6b-v3-multilingual";
+
 /// Accumulate this many speech samples before sending a chunk for background transcription.
-const CHUNK_INTERVAL_SAMPLES: usize = 15 * 16_000; // 15 s at 16 kHz
+const DEFAULT_CHUNK_INTERVAL_SAMPLES: usize = 15 * 16_000; // 15 s at 16 kHz
 /// Overlap kept at the START of each new chunk to avoid cutting words at boundaries.
-const CHUNK_OVERLAP_SAMPLES: usize = 8_000; // 0.5 s
+const DEFAULT_CHUNK_OVERLAP_SAMPLES: usize = 8_000; // 0.5 s
+/// French-first multilingual Parakeet profile tuned for lower EN drift.
+const PARAKEET_V3_MULTI_CHUNK_INTERVAL_SAMPLES: usize = 5 * 16_000; // 5 s at 16 kHz
+/// Small overlap limits boundary cuts while keeping tight chunks.
+const PARAKEET_V3_MULTI_CHUNK_OVERLAP_SAMPLES: usize = 16_000; // 1 s
+
+#[derive(Clone, Copy)]
+struct ChunkingProfile {
+    interval_samples: usize,
+    overlap_samples: usize,
+}
 
 struct ChunkingSharedState {
     last_committed_idx: usize,
@@ -40,22 +73,48 @@ pub(crate) struct ChunkingHandle {
     chunk_tx: std::sync::mpsc::Sender<Option<(Vec<f32>, usize)>>,
     shared_state: Arc<Mutex<ChunkingSharedState>>,
     results: Arc<Mutex<Vec<(usize, String)>>>,
+    chunk_overlap_samples: usize,
 }
 
 pub struct ActiveChunkingHandle(pub Mutex<Option<ChunkingHandle>>);
 
-fn should_use_background_chunking(model_info: Option<&ModelInfo>) -> bool {
+fn is_parakeet_v3_model_id(model_id: &str) -> bool {
+    matches!(
+        model_id,
+        PARAKEET_V3_LEGACY_ID | PARAKEET_V3_ENGLISH_ID | PARAKEET_V3_MULTILINGUAL_ID
+    )
+}
+
+fn chunking_profile_for_model(model_info: Option<&ModelInfo>) -> Option<ChunkingProfile> {
     match model_info {
-        // Parakeet V3 is multilingual and supports long audio, but this app's
-        // current chunking strategy uses independent 15s chunks with minimal
-        // overlap and no decoder context. That hurts language stability and
-        // causes dropped phrases, so keep full-context transcription instead.
-        Some(info) if info.id == "parakeet-tdt-0.6b-v3" => false,
-        Some(info) => matches!(
-            info.engine_type,
-            EngineType::Whisper | EngineType::MoonshineStreaming
-        ),
-        None => true,
+        Some(info) if info.id == PARAKEET_V3_ENGLISH_ID => None,
+        Some(info)
+            if matches!(
+                info.id.as_str(),
+                PARAKEET_V3_MULTILINGUAL_ID | PARAKEET_V3_LEGACY_ID
+            ) =>
+        {
+            Some(ChunkingProfile {
+                interval_samples: PARAKEET_V3_MULTI_CHUNK_INTERVAL_SAMPLES,
+                overlap_samples: PARAKEET_V3_MULTI_CHUNK_OVERLAP_SAMPLES,
+            })
+        }
+        Some(info)
+            if matches!(
+                info.engine_type,
+                EngineType::Whisper | EngineType::MoonshineStreaming
+            ) =>
+        {
+            Some(ChunkingProfile {
+                interval_samples: DEFAULT_CHUNK_INTERVAL_SAMPLES,
+                overlap_samples: DEFAULT_CHUNK_OVERLAP_SAMPLES,
+            })
+        }
+        None => Some(ChunkingProfile {
+            interval_samples: DEFAULT_CHUNK_INTERVAL_SAMPLES,
+            overlap_samples: DEFAULT_CHUNK_OVERLAP_SAMPLES,
+        }),
+        _ => None,
     }
 }
 
@@ -64,23 +123,6 @@ fn normalize_language_for_model_support(language: &str) -> &str {
         "zh-Hans" | "zh-Hant" => "zh",
         other => other,
     }
-}
-
-fn app_language_prefers_english(settings: &AppSettings) -> bool {
-    settings
-        .app_language
-        .split('-')
-        .next()
-        .unwrap_or("en")
-        .eq_ignore_ascii_case("en")
-}
-
-fn parakeet_v3_should_stay_on_english_runtime(settings: &AppSettings) -> bool {
-    if settings.selected_language != "auto" {
-        return normalize_language_for_model_support(&settings.selected_language) == "en";
-    }
-
-    app_language_prefers_english(settings)
 }
 
 fn model_supports_selected_language(model_info: &ModelInfo, settings: &AppSettings) -> bool {
@@ -165,7 +207,7 @@ fn resolve_runtime_model_override(
 ) -> Option<(ModelInfo, String)> {
     let model_info = current_model_info?;
 
-    if model_info.id != "parakeet-tdt-0.6b-v3" {
+    if !is_parakeet_v3_model_id(&model_info.id) {
         return None;
     }
 
@@ -175,22 +217,6 @@ fn resolve_runtime_model_override(
             fallback,
             "Parakeet V3 does not support translation-to-English in this runtime".to_string(),
         ));
-    }
-
-    if !parakeet_v3_should_stay_on_english_runtime(settings) {
-        let fallback = find_best_model_fallback(model_manager, settings, false, &model_info.id)?;
-        let reason = if settings.selected_language != "auto" {
-            format!(
-                "Parakeet V3 is only recommended for English in this runtime, but the selected language is '{}'",
-                settings.selected_language
-            )
-        } else {
-            format!(
-                "Parakeet V3 is only recommended for English in this runtime, but the app language is '{}'",
-                settings.app_language
-            )
-        };
-        return Some((fallback, reason));
     }
 
     if !model_supports_selected_language(model_info, settings) {
@@ -828,13 +854,14 @@ impl ShortcutAction for TranscribeAction {
                 }?;
                 mm.get_model_info(&model_id)
             });
+            let chunking_profile = chunking_profile_for_model(current_model_info.as_ref());
 
             // ── Spawn background streaming transcription ──────────────────────────
-            // The sampler wakes every 500 ms and, once 15 s of new speech are
-            // accumulated, sends a chunk to the worker for transcription.
+            // The sampler wakes every 500 ms and sends a chunk once enough new
+            // speech has accumulated according to the active model profile.
             // The worker processes chunks sequentially so the engine is never
             // called concurrently.  On stop(), only the last few seconds remain.
-            if should_use_background_chunking(current_model_info.as_ref()) {
+            if let Some(chunking_profile) = chunking_profile {
                 let rm_s = Arc::clone(&*app.state::<Arc<AudioRecordingManager>>());
                 let tm_s = Arc::clone(&*app.state::<Arc<TranscriptionManager>>());
 
@@ -846,7 +873,7 @@ impl ShortcutAction for TranscribeAction {
 
                 let (chunk_tx, chunk_rx) = std::sync::mpsc::channel::<Option<(Vec<f32>, usize)>>();
 
-                // Sampler thread: polls audio every 500 ms, sends 15-s chunks
+                // Sampler thread: polls audio every 500 ms and sends profile-sized chunks.
                 let shared_s = Arc::clone(&shared_state);
                 let tx_s = chunk_tx.clone();
                 let sampler_handle = std::thread::spawn(move || {
@@ -865,10 +892,10 @@ impl ShortcutAction for TranscribeAction {
                         };
                         let new_samples = total.saturating_sub(last_committed);
 
-                        if new_samples >= CHUNK_INTERVAL_SAMPLES {
-                            // Include a short overlap at the start to avoid cutting words
+                        if new_samples >= chunking_profile.interval_samples {
+                            // Include overlap at the start to avoid cutting words.
                             let overlap_start =
-                                last_committed.saturating_sub(CHUNK_OVERLAP_SAMPLES);
+                                last_committed.saturating_sub(chunking_profile.overlap_samples);
                             let chunk = snapshot[overlap_start..].to_vec();
                             {
                                 let mut s = shared_s.lock().unwrap();
@@ -876,9 +903,11 @@ impl ShortcutAction for TranscribeAction {
                                 s.next_chunk_idx = next_idx + 1;
                             }
                             debug!(
-                                "Chunk sampler: sending chunk {} ({:.1}s of audio)",
+                                "Chunk sampler: sending chunk {} ({:.1}s of audio, interval {:.1}s, overlap {:.1}s)",
                                 next_idx,
-                                chunk.len() as f32 / 16_000.0
+                                chunk.len() as f32 / 16_000.0,
+                                chunking_profile.interval_samples as f32 / 16_000.0,
+                                chunking_profile.overlap_samples as f32 / 16_000.0
                             );
                             if tx_s.send(Some((chunk, next_idx))).is_err() {
                                 break;
@@ -897,7 +926,13 @@ impl ShortcutAction for TranscribeAction {
                             idx,
                             samples.len() as f32 / 16_000.0
                         );
-                        let text = tm_s.transcribe(samples).unwrap_or_default();
+                        let text = match tm_s.transcribe(samples) {
+                            Ok(text) => text,
+                            Err(err) => {
+                                warn!("Chunk worker: failed to transcribe chunk {}: {}", idx, err);
+                                String::new()
+                            }
+                        };
                         if !text.is_empty() {
                             debug!("Chunk {}: '{:.60}...'", idx, text);
                             results_w.lock().unwrap().push((idx, text));
@@ -913,6 +948,7 @@ impl ShortcutAction for TranscribeAction {
                         chunk_tx,
                         shared_state,
                         results,
+                        chunk_overlap_samples: chunking_profile.overlap_samples,
                     });
                 }
             } else if let Some(info) = current_model_info {
@@ -987,7 +1023,7 @@ impl ShortcutAction for TranscribeAction {
             //      we just need to flush the final partial chunk, assemble, and
             //      optionally run a quick cleanup pass.
             //   B) Single-shot – classic "transcribe everything at once" path used
-            //      for short recordings (< CHUNK_INTERVAL_SAMPLES speech samples).
+            //      when background chunking is not active for the selected model.
 
             let stop_recording_time = Instant::now();
 
@@ -1003,7 +1039,18 @@ impl ShortcutAction for TranscribeAction {
                 let all_samples = match rm.stop_recording(&binding_id) {
                     Some(s) => s,
                     None => {
-                        debug!("No samples from stop_recording (chunked path)");
+                        let reason = format!(
+                            "No samples returned when stopping recording for binding '{}' (chunked path)",
+                            binding_id
+                        );
+                        warn!("{}", reason);
+                        emit_runtime_error(
+                            &ah,
+                            "CAPTURE_NO_SAMPLES",
+                            RuntimeErrorStage::Capture,
+                            reason,
+                            true,
+                        );
                         utils::hide_recording_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
                         return;
@@ -1031,7 +1078,7 @@ impl ShortcutAction for TranscribeAction {
                         };
 
                         // Send the remaining audio (with overlap) as the final chunk
-                        let overlap_start = last_committed.saturating_sub(CHUNK_OVERLAP_SAMPLES);
+                        let overlap_start = last_committed.saturating_sub(ch.chunk_overlap_samples);
                         let remaining = all_samples[overlap_start..].to_vec();
                         let sent_final = !remaining.is_empty();
                         if sent_final {
@@ -1094,7 +1141,18 @@ impl ShortcutAction for TranscribeAction {
                 let samples = match rm.stop_recording(&binding_id) {
                     Some(s) => s,
                     None => {
-                        debug!("No samples retrieved from recording stop");
+                        let reason = format!(
+                            "No samples returned when stopping recording for binding '{}'",
+                            binding_id
+                        );
+                        warn!("{}", reason);
+                        emit_runtime_error(
+                            &ah,
+                            "CAPTURE_NO_SAMPLES",
+                            RuntimeErrorStage::Capture,
+                            reason,
+                            true,
+                        );
                         utils::hide_recording_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
                         return;
@@ -1136,19 +1194,13 @@ impl ShortcutAction for TranscribeAction {
                         }
                     }
                 } else if let Some(info) = selected_model_info.as_ref() {
-                    if info.id == "parakeet-tdt-0.6b-v3" {
+                    if is_parakeet_v3_model_id(&info.id) {
                         if settings_for_model.selected_language != "auto"
                             && !model_supports_selected_language(info, &settings_for_model)
                         {
                             warn!(
                                 "Parakeet V3 is being used with unsupported language '{}', and no downloaded fallback model was available.",
                                 settings_for_model.selected_language
-                            );
-                        } else if !parakeet_v3_should_stay_on_english_runtime(&settings_for_model) {
-                            warn!(
-                                "Parakeet V3 is being used outside its English-first runtime recommendation (selected_language='{}', app_language='{}'), and no downloaded fallback model was available.",
-                                settings_for_model.selected_language,
-                                settings_for_model.app_language
                             );
                         }
                     }
@@ -1202,7 +1254,15 @@ impl ShortcutAction for TranscribeAction {
                         text
                     }
                     Err(err) => {
-                        debug!("Transcription error: {}", err);
+                        let reason = format!("Transcription error: {}", err);
+                        error!("{}", reason);
+                        emit_runtime_error(
+                            &ah,
+                            "TRANSCRIPTION_FAILED",
+                            RuntimeErrorStage::Transcription,
+                            reason,
+                            true,
+                        );
                         utils::hide_recording_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
                         // Restore model if needed
@@ -1264,6 +1324,9 @@ impl ShortcutAction for TranscribeAction {
 
                     if selected_action.is_some() || post_process {
                         show_processing_overlay(&ah);
+                        if let Some(coordinator) = ah.try_state::<TranscriptionCoordinator>() {
+                            coordinator.notify_enter_processing();
+                        }
                     }
 
                     let processed = if let Some(ref action) = selected_action {
@@ -1301,21 +1364,94 @@ impl ShortcutAction for TranscribeAction {
                     }
 
                     let ah_clone = ah.clone();
+                    let fallback_text = final_text.clone();
+                    let main_thread_fallback_text = fallback_text.clone();
                     let paste_time = Instant::now();
+                    emit_lifecycle_state(
+                        &ah,
+                        TranscriptionLifecycleState::Pasting,
+                        None,
+                        Some("paste-dispatch"),
+                    );
                     ah.run_on_main_thread(move || {
+                        let text_for_fallback = fallback_text.clone();
                         match utils::paste(final_text, ah_clone.clone()) {
                             Ok(()) => debug!("Text pasted in {:?}", paste_time.elapsed()),
-                            Err(e) => error!("Failed to paste transcription: {}", e),
+                            Err(e) => {
+                                let reason = format!("Failed to paste transcription: {}", e);
+                                error!("{}", reason);
+                                let copied_to_clipboard =
+                                    match ah_clone.clipboard().write_text(&text_for_fallback) {
+                                        Ok(()) => {
+                                            info!(
+                                                "Paste failed, copied transcription to clipboard as fallback"
+                                            );
+                                            true
+                                        }
+                                        Err(copy_err) => {
+                                            error!(
+                                                "Fallback clipboard write failed after paste error: {}",
+                                                copy_err
+                                            );
+                                            false
+                                        }
+                                    };
+                                emit_runtime_error(
+                                    &ah_clone,
+                                    "PASTE_FAILED",
+                                    RuntimeErrorStage::Paste,
+                                    reason.clone(),
+                                    true,
+                                );
+                                emit_paste_failed_event(
+                                    &ah_clone,
+                                    reason,
+                                    copied_to_clipboard,
+                                );
+                            }
                         }
                         utils::hide_recording_overlay(&ah_clone);
                         change_tray_icon(&ah_clone, TrayIconState::Idle);
                     })
                     .unwrap_or_else(|e| {
-                        error!("Failed to run paste on main thread: {:?}", e);
+                        let reason = format!("Failed to run paste on main thread: {:?}", e);
+                        error!("{}", reason);
+                        let copied_to_clipboard =
+                            match ah.clipboard().write_text(&main_thread_fallback_text) {
+                                Ok(()) => {
+                                    info!(
+                                        "Main-thread paste dispatch failed, copied transcription to clipboard as fallback"
+                                    );
+                                    true
+                                }
+                                Err(copy_err) => {
+                                    error!(
+                                        "Fallback clipboard write failed after main-thread dispatch error: {}",
+                                        copy_err
+                                    );
+                                    false
+                                }
+                            };
+                        emit_runtime_error(
+                            &ah,
+                            "PASTE_MAIN_THREAD_DISPATCH_FAILED",
+                            RuntimeErrorStage::Paste,
+                            reason.clone(),
+                            true,
+                        );
+                        emit_paste_failed_event(&ah, reason, copied_to_clipboard);
                         utils::hide_recording_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
                     });
                 } else {
+                    warn!("Empty transcription result; skipping automatic paste");
+                    emit_runtime_error(
+                        &ah,
+                        "TRANSCRIPTION_EMPTY",
+                        RuntimeErrorStage::Transcription,
+                        "Transcription produced empty output; paste skipped",
+                        true,
+                    );
                     utils::hide_recording_overlay(&ah);
                     change_tray_icon(&ah, TrayIconState::Idle);
                 }

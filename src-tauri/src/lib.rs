@@ -12,6 +12,7 @@ mod input;
 mod llm_client;
 mod managers;
 mod overlay;
+mod runtime_observability;
 mod settings;
 mod shortcut;
 mod signal_handle;
@@ -36,6 +37,8 @@ use signal_hook::consts::{SIGUSR1, SIGUSR2};
 use signal_hook::iterator::Signals;
 use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Arc;
+use std::thread;
+use std::time::Duration;
 use tauri::image::Image;
 pub use transcription_coordinator::TranscriptionCoordinator;
 
@@ -138,6 +141,32 @@ fn initialize_core_logic(app_handle: &AppHandle) -> Result<(), String> {
     app_handle.manage(model_manager.clone());
     app_handle.manage(transcription_manager.clone());
     app_handle.manage(history_manager.clone());
+
+    {
+        let app_handle = app_handle.clone();
+        let model_manager = model_manager.clone();
+        let transcription_manager = transcription_manager.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(2));
+
+            let settings = settings::get_settings(&app_handle);
+            if settings.selected_model.is_empty()
+                || settings.model_unload_timeout == settings::ModelUnloadTimeout::Immediately
+            {
+                return;
+            }
+
+            let is_downloaded = model_manager
+                .get_model_info(&settings.selected_model)
+                .map(|model| model.is_downloaded)
+                .unwrap_or(false);
+
+            if is_downloaded {
+                log::info!("Preloading selected model {}", settings.selected_model);
+                transcription_manager.initiate_model_load();
+            }
+        });
+    }
 
     // Note: Shortcuts are NOT initialized here.
     // The frontend is responsible for calling the `initialize_shortcuts` command
@@ -353,6 +382,8 @@ pub fn run(cli_args: CliArgs) {
         commands::check_apple_intelligence_available,
         commands::initialize_enigo,
         commands::initialize_shortcuts,
+        commands::get_runtime_diagnostics,
+        commands::export_runtime_diagnostics,
         commands::models::get_available_models,
         commands::models::get_model_info,
         commands::models::download_model,
@@ -475,6 +506,7 @@ pub fn run(cli_args: CliArgs) {
             app.manage(TranscriptionCoordinator::new(app_handle.clone()));
             app.manage(actions::ActiveActionState(std::sync::Mutex::new(None)));
             app.manage(actions::ActiveChunkingHandle(std::sync::Mutex::new(None)));
+            app.manage(runtime_observability::RuntimeObservabilityState::new());
 
             initialize_core_logic(&app_handle)?;
 

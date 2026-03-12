@@ -52,6 +52,14 @@
         "name": "Parakeet V3",
         "description": "실험적인 다국어 ONNX 경로입니다. 빠르지만 현재는 중요한 프랑스어와 혼합 언어 받아쓰기에서 Whisper보다 신뢰성이 낮습니다."
       },
+      "parakeet-tdt-0.6b-v3-english": {
+        "name": "Parakeet V3 English",
+        "description": "English-first Parakeet profile. Full-context decoding (no segmentation) for top speed and stability in English."
+      },
+      "parakeet-tdt-0.6b-v3-multilingual": {
+        "name": "Parakeet V3 Multilingual",
+        "description": "Multilingual experimental profile tuned for French and non-English dictation with short segmented decoding."
+      },
       "moonshine-base": {
         "name": "Moonshine Base",
         "description": "영어 전용의 매우 빠른 모델입니다. 가벼운 로컬 전사에는 유용하지만 정확도 최상급은 아닙니다."
@@ -139,7 +147,10 @@
       "bestDefault": "기본 추천",
       "bestQuality": "최고 품질",
       "fastEnglish": "빠른 영어",
-      "experimental": "실험적"
+      "experimental": "실험적",
+      "english": "English",
+      "englishOnly": "English Only",
+      "multilingualExperimental": "Multilingual Experimental"
     }
   },
   "settings": {
@@ -168,13 +179,22 @@
           "transcribe_with_post_process": {
             "name": "후처리 단축키",
             "description": "선택 사항: 항상 AI 후처리를 적용하는 전용 단축키입니다."
+          },
+          "show_history": {
+            "name": "Show History",
+            "description": "Opens the app window and navigates to the History tab."
+          },
+          "copy_latest_history": {
+            "name": "Copy Latest History",
+            "description": "Copies the latest transcription entry to your clipboard."
           }
         },
         "errors": {
           "restore": "원래 단축키 복원에 실패했습니다",
           "set": "단축키 설정 실패: {{error}}",
           "reset": "단축키를 원래 값으로 재설정하는데 실패했습니다"
-        }
+        },
+        "clickToSet": "Click to set"
       },
       "language": {
         "title": "언어",
@@ -228,7 +248,26 @@
         "translation": "번역",
         "allLanguages": "모든 언어"
       },
-      "noModelsMatch": "이 필터에 맞는 모델이 없습니다."
+      "noModelsMatch": "이 필터에 맞는 모델이 없습니다.",
+      "tabs": {
+        "transcription": "Transcription",
+        "processing": "Processing"
+      },
+      "processingModels": {
+        "title": "Processing Models",
+        "description": "Save LLM models for use in post-processing actions.",
+        "noModels": "No processing models saved yet. Add one to use in your actions.",
+        "addModel": "Add Processing Model",
+        "provider": "Provider",
+        "apiKey": "API Key",
+        "apiKeyPlaceholder": "Enter API key",
+        "model": "Model",
+        "modelPlaceholder": "Select or type a model",
+        "save": "Save",
+        "cancel": "Cancel",
+        "fetchModels": "Fetch models",
+        "alreadySaved": "This model is already saved."
+      }
     },
     "advanced": {
       "title": "고급",
@@ -237,7 +276,8 @@
         "output": "출력",
         "transcription": "전사",
         "history": "히스토리",
-        "experimental": "실험적"
+        "experimental": "실험적",
+        "cloudModels": "Cloud Models"
       },
       "experimentalToggle": {
         "label": "실험적 기능",
@@ -389,6 +429,29 @@
         "cancel": "취소",
         "selectToEdit": "세부 정보를 보고 편집하려면 위에서 프롬프트를 선택하세요.",
         "createFirst": "첫 번째 후처리 프롬프트를 만들려면 위의 '새 프롬프트 만들기'를 클릭하세요."
+      },
+      "actions": {
+        "title": "Actions",
+        "description": "Bind Ctrl+number keys (1-9) to custom prompts. Press a shortcut during recording to apply the action after transcription.",
+        "noActions": "No actions configured yet.",
+        "createFirst": "Create your first action to process transcriptions with your configured provider.",
+        "addAction": "Add Action",
+        "editAction": "Edit Action",
+        "key": "Key",
+        "keyLabel": "Key (1-9)",
+        "name": "Name",
+        "namePlaceholder": "e.g. Email mode",
+        "prompt": "Prompt",
+        "promptPlaceholder": "e.g. Format this as a professional email with greeting and sign-off. Add line breaks between paragraphs.",
+        "promptTip": "Tip: Use <code>${output}</code> to insert the transcribed text in your prompt.",
+        "model": "Model (optional)",
+        "modelPlaceholder": "Select a model",
+        "modelTip": "Select a specific model for this action, or use the default from the API section.",
+        "defaultModel": "Default",
+        "save": "Save",
+        "cancel": "Cancel",
+        "delete": "Delete",
+        "maxActionsReached": "Maximum of 9 actions reached."
       }
     },
     "history": {
@@ -400,7 +463,14 @@
       "save": "변환된 텍스트 저장",
       "unsave": "저장에서 제거",
       "delete": "항목 삭제",
-      "deleteError": "항목 삭제에 실패했습니다. 다시 시도해주세요."
+      "deleteError": "항목 삭제에 실패했습니다. 다시 시도해주세요.",
+      "copyFailed": "Failed to copy transcription.",
+      "reprocess": "Reprocess with different model",
+      "reprocessing": "Reprocessing...",
+      "selectModel": "Select model",
+      "originalTranscript": "Original",
+      "postProcessed": "Post-processed",
+      "action": "Action {{key}}"
     },
     "debug": {
       "title": "디버그",
@@ -501,7 +571,37 @@
           "description": "OpenAI의 Whisper 자동 음성 인식 모델의 고성능 추론",
           "details": "VocalType는 빠르고 로컬 음성-텍스트 처리를 위해 Whisper.cpp를 사용합니다. Georgi Gerganov와 기여자들의 놀라운 작업에 감사드립니다."
         }
+      },
+      "exportImport": {
+        "title": "Export / Import Settings",
+        "description": "Transfer your configuration to another computer",
+        "export": "Export",
+        "import": "Import",
+        "exportSuccess": "Settings exported successfully",
+        "importSuccess": "Settings imported successfully"
       }
+    },
+    "longAudioModel": {
+      "title": "Long Audio Model",
+      "description": "Automatically switch to a different model when recording duration exceeds the threshold.",
+      "modelLabel": "Model for long recordings",
+      "modelDescription": "Select a model to use for recordings longer than the threshold.",
+      "thresholdLabel": "Duration threshold (seconds)",
+      "thresholdDescription": "Switch to the long audio model when recording exceeds this duration.",
+      "disabled": "Disabled",
+      "seconds": "{{value}}s"
+    },
+    "gemini": {
+      "title": "Gemini API",
+      "description": "Use Google's Gemini API for cloud-based transcription. Requires an API key.",
+      "apiKey": "API Key",
+      "apiKeyPlaceholder": "Enter your Gemini API key",
+      "model": "Model",
+      "modelDescription": "Select which Gemini model to use for transcription",
+      "apiKeyRequired": "API Key Required",
+      "apiKeyRequiredDescription": "Enter your Google Gemini API key to use cloud transcription.",
+      "save": "Save",
+      "cancel": "Cancel"
     }
   },
   "footer": {
@@ -555,6 +655,86 @@
   },
   "overlay": {
     "transcribing": "텍스트로 변환 중...",
-    "processing": "처리 중..."
+    "processing": "처리 중...",
+    "cancelConfirm": "Esc again to cancel",
+    "pauseRecording": "Pause recording",
+    "resumeRecording": "Resume recording",
+    "cancelRecording": "Cancel recording"
+  },
+  "auth": {
+    "trialBadge": "7-day free trial, no card required",
+    "paidAccess": "Paid access",
+    "headline": "Create your account and unlock VocalType instantly.",
+    "subheadline": "Every account starts with a 7-day free trial without requiring a card. After the trial ends, users can subscribe for $4.99 per month to keep unlimited dictation across ChatGPT, Claude, Gemini and Windows apps.",
+    "features": {
+      "trial": {
+        "title": "7-day free trial",
+        "description": "Create an account and test the full product immediately, with no card required upfront."
+      },
+      "subscription": {
+        "title": "Subscription checked",
+        "description": "The desktop app verifies account access before unlocking the transcription workflow."
+      },
+      "billing": {
+        "title": "Simple billing",
+        "description": "Manage your subscription through Stripe from inside the app."
+      }
+    },
+    "createAccount": "Create account",
+    "login": "Login",
+    "loginToAccount": "Login to your account",
+    "account": "Account",
+    "unlocked": "Unlocked",
+    "locked": "Locked",
+    "subscribeNow": "Subscribe now",
+    "manageSubscription": "Manage subscription",
+    "refreshAccess": "Refresh access",
+    "logout": "Logout",
+    "trialNote": "Your 7-day free trial starts when you create your account. No card is required until the trial ends.",
+    "sessionExpired": "Your session has expired. Please log in again.",
+    "fields": {
+      "name": "Name",
+      "namePlaceholder": "Your name",
+      "email": "Email",
+      "emailPlaceholder": "you@example.com",
+      "password": "Password",
+      "passwordPlaceholder": "Minimum 6 characters"
+    },
+    "access": {
+      "active": "Subscription active",
+      "trialActive": "Free trial active",
+      "trialEndsToday": "Trial ends today",
+      "trialDaysLeft": "{{count}} days left in your free trial",
+      "canceled": "Subscription canceled",
+      "trialEnded": "Free trial ended"
+    },
+    "forgotPassword": "Forgot password?",
+    "backToLogin": "Back to login",
+    "resetPassword": "Reset password",
+    "sendCode": "Send code",
+    "verificationCode": "6-digit code",
+    "verificationCodePlaceholder": "123456",
+    "codeSent": "A 6-digit code was sent to your email address.",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm password",
+    "passwordResetSuccess": "Password reset successfully. You are now logged in.",
+    "changePassword": "Change password",
+    "oldPassword": "Current password",
+    "passwordChanged": "Password changed successfully.",
+    "errors": {
+      "networkError": "Could not connect to the server. Please check your internet connection.",
+      "emailExistsSwitchedToLogin": "An account with this email already exists. Please log in instead.",
+      "deviceAlreadyRegistered": "An account was already created on this computer. Please log in to your existing account.",
+      "passwordsDoNotMatch": "Passwords do not match.",
+      "invalidResetCode": "Invalid or expired code.",
+      "wrongOldPassword": "Current password is incorrect."
+    }
+  },
+  "warnings": {
+    "whisperGpuUnavailable": "GPU not available — running on CPU",
+    "whisperGpuUnavailableDesc": "Transcription may be slow. Switch to Parakeet V3 for fast CPU performance.",
+    "pasteFailed": "Automatic paste failed",
+    "pasteFailedCopied": "Automatic paste failed — text copied to clipboard",
+    "pasteFailedDesc": "Reason: {{reason}}"
   }
 }

@@ -1,6 +1,8 @@
+use crate::managers::audio::AudioRecordingManager;
 use crate::managers::model::{EngineType, ModelInfo, ModelManager};
 use crate::managers::transcription::TranscriptionManager;
 use crate::settings::{get_settings, write_settings};
+use log::warn;
 use std::sync::Arc;
 use tauri::{AppHandle, State};
 
@@ -41,9 +43,23 @@ pub async fn delete_model(
     transcription_manager: State<'_, Arc<TranscriptionManager>>,
     model_id: String,
 ) -> Result<(), String> {
-    // If deleting the active model, unload it and clear the setting
+    let target_model = model_manager
+        .get_model_info(&model_id)
+        .ok_or_else(|| format!("Model not found: {}", model_id))?;
+
+    // If deleting the active model (or another profile sharing the same
+    // underlying files), unload it and clear the setting.
     let settings = get_settings(&app_handle);
-    if settings.selected_model == model_id {
+    let active_uses_same_files = if settings.selected_model.is_empty() {
+        false
+    } else {
+        model_manager
+            .get_model_info(&settings.selected_model)
+            .map(|active_model| active_model.filename == target_model.filename)
+            .unwrap_or(false)
+    };
+
+    if settings.selected_model == model_id || active_uses_same_files {
         transcription_manager
             .unload_model()
             .map_err(|e| format!("Failed to unload model: {}", e))?;
@@ -64,6 +80,7 @@ pub async fn set_active_model(
     app_handle: AppHandle,
     model_manager: State<'_, Arc<ModelManager>>,
     transcription_manager: State<'_, Arc<TranscriptionManager>>,
+    audio_manager: State<'_, Arc<AudioRecordingManager>>,
     model_id: String,
 ) -> Result<(), String> {
     // Check if model exists and is available
@@ -84,6 +101,15 @@ pub async fn set_active_model(
     let mut settings = get_settings(&app_handle);
     settings.selected_model = model_id.clone();
     write_settings(&app_handle, settings);
+
+    // If microphone stream is currently open (always-on mode), restart it so
+    // recorder/VAD profile follows the newly selected model immediately.
+    if let Err(e) = audio_manager.update_selected_device() {
+        warn!(
+            "Failed to refresh microphone stream after model change to '{}': {}",
+            model_id, e
+        );
+    }
 
     Ok(())
 }

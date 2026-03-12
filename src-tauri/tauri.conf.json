@@ -26,11 +26,11 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' asset: https://asset.localhost data: blob:; connect-src 'self' https:; font-src 'self' data:; media-src 'self' asset: https://asset.localhost blob:",
       "assetProtocol": {
         "enable": true,
         "scope": {
-          "allow": ["**"],
+          "allow": ["$RESOURCE/**", "$APP/**", "$APPDATA/**", "$APPCONFIG/**", "$TEMP/**"],
           "requireLiteralLeadingDot": false
         }
       }

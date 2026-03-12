@@ -17,6 +17,23 @@ use tar::Archive;
 use tauri::{AppHandle, Emitter, Manager};
 
 const MODEL_ASSET_BASE_URL: &str = "https://blob.handy.computer";
+const PARAKEET_V3_LEGACY_ID: &str = "parakeet-tdt-0.6b-v3";
+const PARAKEET_V3_ENGLISH_ID: &str = "parakeet-tdt-0.6b-v3-english";
+const PARAKEET_V3_MULTILINGUAL_ID: &str = "parakeet-tdt-0.6b-v3-multilingual";
+const PARAKEET_V3_REQUIRED_FILES: &[(&str, u64)] = &[
+    ("encoder-model.int8.onnx", 100_000_000),
+    ("decoder_joint-model.int8.onnx", 1_000_000),
+    ("nemo128.onnx", 10_000),
+    ("vocab.txt", 10_000),
+    ("config.json", 10),
+];
+
+fn is_parakeet_v3_family(model_id: &str) -> bool {
+    matches!(
+        model_id,
+        PARAKEET_V3_LEGACY_ID | PARAKEET_V3_ENGLISH_ID | PARAKEET_V3_MULTILINGUAL_ID
+    )
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub enum EngineType {
@@ -66,6 +83,62 @@ pub struct ModelManager {
 }
 
 impl ModelManager {
+    fn required_files_for_directory_model(
+        model_id: &str,
+    ) -> Option<&'static [(&'static str, u64)]> {
+        if is_parakeet_v3_family(model_id) {
+            Some(PARAKEET_V3_REQUIRED_FILES)
+        } else {
+            None
+        }
+    }
+
+    fn validate_directory_model_contents(&self, model_id: &str, model_dir: &Path) -> Result<()> {
+        if !model_dir.exists() || !model_dir.is_dir() {
+            anyhow::bail!("model directory does not exist: {}", model_dir.display());
+        }
+
+        if let Some(required_files) = Self::required_files_for_directory_model(model_id) {
+            for (file_name, min_bytes) in required_files {
+                let file_path = model_dir.join(file_name);
+                if !file_path.exists() {
+                    anyhow::bail!(
+                        "missing required file '{}' in {}",
+                        file_name,
+                        model_dir.display()
+                    );
+                }
+
+                let metadata = fs::metadata(&file_path)?;
+                if !metadata.is_file() {
+                    anyhow::bail!(
+                        "required path '{}' is not a file in {}",
+                        file_name,
+                        model_dir.display()
+                    );
+                }
+
+                if metadata.len() < *min_bytes {
+                    anyhow::bail!(
+                        "file '{}' is too small ({} bytes, expected at least {} bytes)",
+                        file_name,
+                        metadata.len(),
+                        min_bytes
+                    );
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn set_downloading_state_for_filename(&self, filename: &str, is_downloading: bool) {
+        let mut models = self.available_models.lock().unwrap();
+        for model in models.values_mut().filter(|m| m.filename == filename) {
+            model.is_downloading = is_downloading;
+        }
+    }
+
     pub fn new(app_handle: &AppHandle) -> Result<Self> {
         // Create models directory in app data
         let models_dir = app_handle
@@ -112,8 +185,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.62,
-                speed_score: 0.82,
+                accuracy_score: 0.80,
+                speed_score: 0.84,
                 supports_translation: true,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -127,18 +200,18 @@ impl ModelManager {
             ModelInfo {
                 id: "medium".to_string(),
                 name: "Whisper Medium".to_string(),
-                description: "Solid multilingual model with better accuracy than Small, but not the best speed or quality tier."
+                description: "Good multilingual accuracy with reasonable speed. A solid middle ground between Small and Turbo."
                     .to_string(),
                 filename: "whisper-medium-q4_1.bin".to_string(),
                 url: Some(format!("{}/whisper-medium-q4_1.bin", MODEL_ASSET_BASE_URL)),
-                size_mb: 492, // Approximate size
+                size_mb: 492,
                 is_downloaded: false,
                 is_downloading: false,
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.76,
-                speed_score: 0.60,
+                accuracy_score: 0.86,
+                speed_score: 0.74,
                 supports_translation: true,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -152,18 +225,18 @@ impl ModelManager {
                 id: "turbo".to_string(),
                 name: "Whisper Turbo".to_string(),
                 description:
-                    "Best default for most users. Strong multilingual quality with much better speed than Whisper Large."
+                    "Best default for most users. Near-Large accuracy at 3x the speed. Excellent for French, English, and 97 other languages."
                         .to_string(),
                 filename: "ggml-large-v3-turbo.bin".to_string(),
                 url: Some(format!("{}/ggml-large-v3-turbo.bin", MODEL_ASSET_BASE_URL)),
-                size_mb: 1600, // Approximate size
+                size_mb: 1600,
                 is_downloaded: false,
                 is_downloading: false,
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.88,
-                speed_score: 0.56,
+                accuracy_score: 0.93,
+                speed_score: 0.78,
                 supports_translation: false, // Turbo doesn't support translation
                 is_recommended: true,
                 supported_languages: whisper_languages.clone(),
@@ -175,20 +248,20 @@ impl ModelManager {
             "large".to_string(),
             ModelInfo {
                 id: "large".to_string(),
-                name: "Whisper Large".to_string(),
+                name: "Whisper Large v3".to_string(),
                 description:
-                    "Highest offline quality in the app for difficult accents, noisy audio, and multilingual dictation. Slowest option."
+                    "Maximum offline accuracy. Best for difficult accents, noisy audio, and demanding multilingual dictation."
                         .to_string(),
                 filename: "ggml-large-v3-q5_0.bin".to_string(),
                 url: Some(format!("{}/ggml-large-v3-q5_0.bin", MODEL_ASSET_BASE_URL)),
-                size_mb: 1100, // Approximate size
+                size_mb: 1100,
                 is_downloaded: false,
                 is_downloading: false,
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.95,
-                speed_score: 0.28,
+                accuracy_score: 0.96,
+                speed_score: 0.52,
                 supports_translation: true,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -213,7 +286,7 @@ impl ModelManager {
                 is_directory: false,
                 engine_type: EngineType::Whisper,
                 accuracy_score: 0.90,
-                speed_score: 0.34,
+                speed_score: 0.52,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -228,18 +301,18 @@ impl ModelManager {
                 id: "parakeet-tdt-0.6b-v2".to_string(),
                 name: "Parakeet V2".to_string(),
                 description:
-                    "Fast English-only option. Good when you want lower latency and can stay in English."
+                    "Top English-only speed. NVIDIA NeMo model with near-instant transcription. Best pick for English-only dictation."
                         .to_string(),
-                filename: "parakeet-tdt-0.6b-v2-int8".to_string(), // Directory name
+                filename: "parakeet-tdt-0.6b-v2-int8".to_string(),
                 url: Some(format!("{}/parakeet-v2-int8.tar.gz", MODEL_ASSET_BASE_URL)),
-                size_mb: 473, // Approximate size for int8 quantized model
+                size_mb: 473,
                 is_downloaded: false,
                 is_downloading: false,
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::Parakeet,
-                accuracy_score: 0.82,
-                speed_score: 0.88,
+                accuracy_score: 0.87,
+                speed_score: 0.92,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -258,23 +331,75 @@ impl ModelManager {
         .collect();
 
         available_models.insert(
-            "parakeet-tdt-0.6b-v3".to_string(),
+            PARAKEET_V3_ENGLISH_ID.to_string(),
             ModelInfo {
-                id: "parakeet-tdt-0.6b-v3".to_string(),
-                name: "Parakeet V3".to_string(),
+                id: PARAKEET_V3_ENGLISH_ID.to_string(),
+                name: "Parakeet V3 English".to_string(),
                 description:
-                    "Experimental multilingual ONNX path. Fast, but currently less reliable than Whisper for critical French and mixed-language dictation."
+                    "English-first Parakeet profile. Fastest option for English dictation with full-context decoding (no segmentation)."
                         .to_string(),
-                filename: "parakeet-tdt-0.6b-v3-int8".to_string(), // Directory name
+                filename: "parakeet-tdt-0.6b-v3-int8".to_string(),
                 url: Some(format!("{}/parakeet-v3-int8.tar.gz", MODEL_ASSET_BASE_URL)),
-                size_mb: 478, // Approximate size for int8 quantized model
+                size_mb: 478,
                 is_downloaded: false,
                 is_downloading: false,
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::Parakeet,
-                accuracy_score: 0.45,
+                accuracy_score: 0.88,
+                speed_score: 0.90,
+                supports_translation: false,
+                is_recommended: false,
+                supported_languages: vec!["en".to_string()],
+                is_custom: false,
+            },
+        );
+
+        available_models.insert(
+            PARAKEET_V3_MULTILINGUAL_ID.to_string(),
+            ModelInfo {
+                id: PARAKEET_V3_MULTILINGUAL_ID.to_string(),
+                name: "Parakeet V3 Multilingual".to_string(),
+                description:
+                    "Multilingual experimental Parakeet profile tuned for non-English dictation with short segmented decoding."
+                        .to_string(),
+                filename: "parakeet-tdt-0.6b-v3-int8".to_string(),
+                url: Some(format!("{}/parakeet-v3-int8.tar.gz", MODEL_ASSET_BASE_URL)),
+                size_mb: 478,
+                is_downloaded: false,
+                is_downloading: false,
+                partial_size: 0,
+                is_directory: true,
+                engine_type: EngineType::Parakeet,
+                accuracy_score: 0.82,
                 speed_score: 0.84,
+                supports_translation: false,
+                is_recommended: false,
+                supported_languages: parakeet_v3_languages.clone(),
+                is_custom: false,
+            },
+        );
+
+        // Legacy alias retained for settings/backward-compatibility only.
+        // It is intentionally hidden from get_available_models().
+        available_models.insert(
+            PARAKEET_V3_LEGACY_ID.to_string(),
+            ModelInfo {
+                id: PARAKEET_V3_LEGACY_ID.to_string(),
+                name: "Parakeet V3".to_string(),
+                description:
+                    "Legacy alias for Parakeet V3. Use Parakeet V3 English or Parakeet V3 Multilingual."
+                        .to_string(),
+                filename: "parakeet-tdt-0.6b-v3-int8".to_string(),
+                url: Some(format!("{}/parakeet-v3-int8.tar.gz", MODEL_ASSET_BASE_URL)),
+                size_mb: 478,
+                is_downloaded: false,
+                is_downloading: false,
+                partial_size: 0,
+                is_directory: true,
+                engine_type: EngineType::Parakeet,
+                accuracy_score: 0.0,
+                speed_score: 0.0,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: parakeet_v3_languages,
@@ -288,7 +413,7 @@ impl ModelManager {
                 id: "moonshine-base".to_string(),
                 name: "Moonshine Base".to_string(),
                 description:
-                    "Very fast English-only model. Useful for lightweight local transcription, not top-tier accuracy."
+                    "Ultra-lightweight English model at 58MB. Near-instant transcription with solid accuracy. Great for quick notes."
                         .to_string(),
                 filename: "moonshine-base".to_string(),
                 url: Some(format!("{}/moonshine-base.tar.gz", MODEL_ASSET_BASE_URL)),
@@ -298,7 +423,7 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::Moonshine,
-                accuracy_score: 0.58,
+                accuracy_score: 0.76,
                 speed_score: 0.93,
                 supports_translation: false,
                 is_recommended: false,
@@ -313,7 +438,7 @@ impl ModelManager {
                 id: "moonshine-tiny-streaming-en".to_string(),
                 name: "Moonshine V2 Tiny".to_string(),
                 description:
-                    "Fastest streaming-style English option. Use when latency matters more than accuracy."
+                    "Fastest English model available at only 31MB. Sub-100ms transcription. Accuracy is reduced — best for short commands and quick notes."
                         .to_string(),
                 filename: "moonshine-tiny-streaming-en".to_string(),
                 url: Some(format!(
@@ -326,7 +451,7 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::MoonshineStreaming,
-                accuracy_score: 0.42,
+                accuracy_score: 0.72,
                 speed_score: 0.98,
                 supports_translation: false,
                 is_recommended: false,
@@ -341,7 +466,7 @@ impl ModelManager {
                 id: "moonshine-small-streaming-en".to_string(),
                 name: "Moonshine V2 Small".to_string(),
                 description:
-                    "Fast English streaming-style model with a better balance than Tiny, but still below Whisper on quality."
+                    "Fast English streaming model with a good accuracy/speed balance. Recommended for English-first users who want instant results."
                         .to_string(),
                 filename: "moonshine-small-streaming-en".to_string(),
                 url: Some(format!(
@@ -354,7 +479,7 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::MoonshineStreaming,
-                accuracy_score: 0.54,
+                accuracy_score: 0.78,
                 speed_score: 0.94,
                 supports_translation: false,
                 is_recommended: false,
@@ -369,7 +494,7 @@ impl ModelManager {
                 id: "moonshine-medium-streaming-en".to_string(),
                 name: "Moonshine V2 Medium".to_string(),
                 description:
-                    "Best Moonshine streaming-style variant for English, but still a niche speed-first option."
+                    "Best accuracy in the Moonshine family for English. Fast streaming with near-Parakeet quality. Great for longer dictation in English."
                         .to_string(),
                 filename: "moonshine-medium-streaming-en".to_string(),
                 url: Some(format!(
@@ -382,8 +507,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::MoonshineStreaming,
-                accuracy_score: 0.64,
-                speed_score: 0.88,
+                accuracy_score: 0.82,
+                speed_score: 0.90,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -404,7 +529,7 @@ impl ModelManager {
                 id: "sense-voice-int8".to_string(),
                 name: "SenseVoice".to_string(),
                 description:
-                    "Fast multilingual model for Chinese, English, Japanese, Korean, and Cantonese. Good niche choice, not universal coverage."
+                    "Best-in-class for Chinese, Japanese, Korean and Cantonese at only 160MB. State-of-the-art accuracy for Asian languages with very fast inference."
                         .to_string(),
                 filename: "sense-voice-int8".to_string(),
                 url: Some(format!("{}/sense-voice-int8.tar.gz", MODEL_ASSET_BASE_URL)),
@@ -414,8 +539,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::SenseVoice,
-                accuracy_score: 0.72,
-                speed_score: 0.90,
+                accuracy_score: 0.88,
+                speed_score: 0.91,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: sense_voice_languages,
@@ -429,7 +554,7 @@ impl ModelManager {
                 id: "gemini-api".to_string(),
                 name: "Gemini API".to_string(),
                 description:
-                    "Cloud transcription via Google Gemini. Highest flexibility, but requires internet, API key, and sends audio off-device."
+                    "Cloud transcription via Google Gemini. Highest accuracy available, supports all languages. Requires internet connection and API key."
                         .to_string(),
                 filename: "".to_string(),
                 url: None,
@@ -439,8 +564,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::GeminiApi,
-                accuracy_score: 0.93,
-                speed_score: 0.38,
+                accuracy_score: 0.97,
+                speed_score: 0.75,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -475,7 +600,11 @@ impl ModelManager {
 
     pub fn get_available_models(&self) -> Vec<ModelInfo> {
         let models = self.available_models.lock().unwrap();
-        models.values().cloned().collect()
+        models
+            .values()
+            .filter(|m| m.id != PARAKEET_V3_LEGACY_ID)
+            .cloned()
+            .collect()
     }
 
     pub fn get_model_info(&self, model_id: &str) -> Option<ModelInfo> {
@@ -536,7 +665,11 @@ impl ModelManager {
                     let _ = fs::remove_dir_all(&extracting_path);
                 }
 
-                model.is_downloaded = model_path.exists() && model_path.is_dir();
+                model.is_downloaded = model_path.exists()
+                    && model_path.is_dir()
+                    && self
+                        .validate_directory_model_contents(&model.id, &model_path)
+                        .is_ok();
                 model.is_downloading = false;
 
                 // Get partial file size if it exists (for the .tar.gz being downloaded)
@@ -567,6 +700,21 @@ impl ModelManager {
 
     fn auto_select_model_if_needed(&self) -> Result<()> {
         let mut settings = get_settings(&self.app_handle);
+        let mut settings_changed = false;
+
+        if settings.selected_model == PARAKEET_V3_LEGACY_ID {
+            settings.selected_model = PARAKEET_V3_MULTILINGUAL_ID.to_string();
+            settings_changed = true;
+        }
+
+        if settings.long_audio_model.as_deref() == Some(PARAKEET_V3_LEGACY_ID) {
+            settings.long_audio_model = Some(PARAKEET_V3_MULTILINGUAL_ID.to_string());
+            settings_changed = true;
+        }
+
+        if settings_changed {
+            write_settings(&self.app_handle, settings.clone());
+        }
 
         // Clear stale selection: selected model is set but doesn't exist
         // in available_models (e.g. deleted custom model file)
@@ -590,7 +738,9 @@ impl ModelManager {
         if settings.selected_model.is_empty() {
             let models = self.available_models.lock().unwrap();
             if let Some(available_model) = models.values().find(|model| {
-                model.is_downloaded && !matches!(model.engine_type, EngineType::GeminiApi)
+                model.id != PARAKEET_V3_LEGACY_ID
+                    && model.is_downloaded
+                    && !matches!(model.engine_type, EngineType::GeminiApi)
             }) {
                 info!(
                     "Auto-selecting model: {} ({})",
@@ -749,14 +899,38 @@ impl ModelManager {
             .models_dir
             .join(format!("{}.partial", &model_info.filename));
 
-        // Don't download if complete version already exists
+        // Don't download if a complete and valid version already exists
         if model_path.exists() {
+            let existing_is_valid = if model_info.is_directory {
+                self.validate_directory_model_contents(model_id, &model_path)
+                    .is_ok()
+            } else {
+                true
+            };
+
+            if !existing_is_valid {
+                warn!(
+                    "Existing model files are invalid for '{}', removing and re-downloading",
+                    model_id
+                );
+                if model_info.is_directory {
+                    let _ = fs::remove_dir_all(&model_path);
+                } else {
+                    let _ = fs::remove_file(&model_path);
+                }
+            } else {
+                // Clean up any partial file that might exist
+                if partial_path.exists() {
+                    let _ = fs::remove_file(&partial_path);
+                }
+                self.update_download_status()?;
+                return Ok(());
+            }
+
             // Clean up any partial file that might exist
             if partial_path.exists() {
                 let _ = fs::remove_file(&partial_path);
             }
-            self.update_download_status()?;
-            return Ok(());
         }
 
         // Check if we have a partial download to resume
@@ -769,13 +943,8 @@ impl ModelManager {
             0
         };
 
-        // Mark as downloading
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                model.is_downloading = true;
-            }
-        }
+        // Mark all profile aliases sharing these files as downloading.
+        self.set_downloading_state_for_filename(&model_info.filename, true);
 
         // Create cancellation flag for this download
         let cancel_flag = Arc::new(AtomicBool::new(false));
@@ -817,12 +986,7 @@ impl ModelManager {
             && response.status() != reqwest::StatusCode::PARTIAL_CONTENT
         {
             // Mark as not downloading on error
-            {
-                let mut models = self.available_models.lock().unwrap();
-                if let Some(model) = models.get_mut(model_id) {
-                    model.is_downloading = false;
-                }
-            }
+            self.set_downloading_state_for_filename(&model_info.filename, false);
             return Err(anyhow::anyhow!(
                 "Failed to download model: HTTP {}",
                 response.status()
@@ -877,12 +1041,7 @@ impl ModelManager {
                 info!("Download cancelled for: {}", model_id);
 
                 // Update state to mark as not downloading
-                {
-                    let mut models = self.available_models.lock().unwrap();
-                    if let Some(model) = models.get_mut(model_id) {
-                        model.is_downloading = false;
-                    }
-                }
+                self.set_downloading_state_for_filename(&model_info.filename, false);
 
                 // Remove cancel flag
                 {
@@ -896,12 +1055,7 @@ impl ModelManager {
 
             let chunk = chunk.map_err(|e| {
                 // Mark as not downloading on error
-                {
-                    let mut models = self.available_models.lock().unwrap();
-                    if let Some(model) = models.get_mut(model_id) {
-                        model.is_downloading = false;
-                    }
-                }
+                self.set_downloading_state_for_filename(&model_info.filename, false);
                 e
             })?;
 
@@ -951,12 +1105,7 @@ impl ModelManager {
             if actual_size != total_size {
                 // Download is incomplete/corrupted - delete partial and return error
                 let _ = fs::remove_file(&partial_path);
-                {
-                    let mut models = self.available_models.lock().unwrap();
-                    if let Some(model) = models.get_mut(model_id) {
-                        model.is_downloading = false;
-                    }
-                }
+                self.set_downloading_state_for_filename(&model_info.filename, false);
                 return Err(anyhow::anyhow!(
                     "Download incomplete: expected {} bytes, got {} bytes",
                     total_size,
@@ -1001,6 +1150,7 @@ impl ModelManager {
                 let error_msg = format!("Failed to extract archive: {}", e);
                 // Clean up failed extraction
                 let _ = fs::remove_dir_all(&temp_extract_dir);
+                self.set_downloading_state_for_filename(&model_info.filename, false);
                 // Remove from extracting set
                 {
                     let mut extracting = self.extracting_models.lock().unwrap();
@@ -1039,6 +1189,29 @@ impl ModelManager {
                 fs::rename(&temp_extract_dir, &final_model_dir)?;
             }
 
+            if let Err(e) = self.validate_directory_model_contents(model_id, &final_model_dir) {
+                let error_msg = format!(
+                    "Extracted model files are invalid for '{}': {}",
+                    model_id, e
+                );
+                warn!("{}", error_msg);
+                let _ = fs::remove_dir_all(&final_model_dir);
+                let _ = fs::remove_dir_all(&temp_extract_dir);
+                self.set_downloading_state_for_filename(&model_info.filename, false);
+                {
+                    let mut extracting = self.extracting_models.lock().unwrap();
+                    extracting.remove(model_id);
+                }
+                let _ = self.app_handle.emit(
+                    "model-extraction-failed",
+                    &serde_json::json!({
+                        "model_id": model_id,
+                        "error": error_msg
+                    }),
+                );
+                return Err(anyhow::anyhow!(error_msg));
+            }
+
             info!("Successfully extracted archive for model: {}", model_id);
             // Remove from extracting set
             {
@@ -1055,15 +1228,9 @@ impl ModelManager {
             fs::rename(&partial_path, &model_path)?;
         }
 
-        // Update download status
-        {
-            let mut models = self.available_models.lock().unwrap();
-            if let Some(model) = models.get_mut(model_id) {
-                model.is_downloading = false;
-                model.is_downloaded = true;
-                model.partial_size = 0;
-            }
-        }
+        // Refresh status for all models so profile aliases sharing the same
+        // underlying files (e.g. Parakeet V3 English/Multilingual) stay in sync.
+        self.update_download_status()?;
 
         // Remove cancel flag on successful completion
         {
@@ -1188,6 +1355,8 @@ impl ModelManager {
         if model_info.is_directory {
             // For directory-based models, ensure the directory exists and is complete
             if model_path.exists() && model_path.is_dir() && !partial_path.exists() {
+                self.validate_directory_model_contents(model_id, &model_path)
+                    .map_err(|e| anyhow::anyhow!("Model directory is incomplete: {}", e))?;
                 Ok(model_path)
             } else {
                 Err(anyhow::anyhow!(
@@ -1210,6 +1379,10 @@ impl ModelManager {
 
     pub fn cancel_download(&self, model_id: &str) -> Result<()> {
         debug!("ModelManager: cancel_download called for: {}", model_id);
+        let filename = {
+            let models = self.available_models.lock().unwrap();
+            models.get(model_id).map(|m| m.filename.clone())
+        };
 
         // Set the cancellation flag to stop the download loop
         {
@@ -1223,7 +1396,9 @@ impl ModelManager {
         }
 
         // Update state immediately for UI responsiveness
-        {
+        if let Some(filename) = filename {
+            self.set_downloading_state_for_filename(&filename, false);
+        } else {
             let mut models = self.available_models.lock().unwrap();
             if let Some(model) = models.get_mut(model_id) {
                 model.is_downloading = false;

@@ -36,7 +36,8 @@ const getModelRank = (model: ModelInfo): number => {
   if (model.id === "moonshine-small-streaming-en") return 540;
   if (model.id === "moonshine-base") return 520;
   if (model.id === "moonshine-tiny-streaming-en") return 500;
-  if (model.id === "parakeet-tdt-0.6b-v3") return 300;
+  if (model.id === "parakeet-tdt-0.6b-v3-english") return 360;
+  if (model.id === "parakeet-tdt-0.6b-v3-multilingual") return 340;
   if (model.id === "gemini-api") return 200;
   return Math.round(model.accuracy_score * 1000 + model.speed_score * 100);
 };

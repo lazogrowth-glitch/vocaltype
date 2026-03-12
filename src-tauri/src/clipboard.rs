@@ -61,7 +61,14 @@ fn paste_via_clipboard(
         }
     }
 
-    std::thread::sleep(std::time::Duration::from_millis(50));
+    // Give the target app enough time to consume clipboard content before restore.
+    // Too-short delays can cause apparent "paste did nothing" on some apps.
+    #[cfg(target_os = "windows")]
+    let restore_delay_ms = paste_delay_ms.max(450);
+
+    #[cfg(not(target_os = "windows"))]
+    let restore_delay_ms = paste_delay_ms.max(250);
+    std::thread::sleep(std::time::Duration::from_millis(restore_delay_ms));
 
     // Restore original clipboard content
     // On Wayland, prefer wl-copy for better compatibility
@@ -588,6 +595,13 @@ fn should_send_auto_submit(auto_submit: bool, paste_method: PasteMethod) -> bool
     auto_submit && paste_method != PasteMethod::None
 }
 
+fn should_copy_result_to_clipboard(
+    paste_method: PasteMethod,
+    clipboard_handling: ClipboardHandling,
+) -> bool {
+    paste_method == PasteMethod::None || clipboard_handling == ClipboardHandling::CopyToClipboard
+}
+
 pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
     let settings = get_settings(&app_handle);
     let paste_method = settings.paste_method;
@@ -651,8 +665,9 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
         send_return_key(&mut enigo, settings.auto_submit_key)?;
     }
 
-    // After pasting, optionally copy to clipboard based on settings
-    if settings.clipboard_handling == ClipboardHandling::CopyToClipboard {
+    // Keep a recoverable result in clipboard when paste is explicitly disabled.
+    // This matches UI copy: "None" skips insertion but still updates clipboard/history.
+    if should_copy_result_to_clipboard(paste_method, settings.clipboard_handling) {
         let clipboard = app_handle.clipboard();
         clipboard
             .write_text(&text)
@@ -683,5 +698,41 @@ mod tests {
         assert!(should_send_auto_submit(true, PasteMethod::Direct));
         assert!(should_send_auto_submit(true, PasteMethod::CtrlShiftV));
         assert!(should_send_auto_submit(true, PasteMethod::ShiftInsert));
+    }
+
+    #[test]
+    fn none_paste_method_always_copies_result() {
+        assert!(should_copy_result_to_clipboard(
+            PasteMethod::None,
+            ClipboardHandling::DontModify
+        ));
+        assert!(should_copy_result_to_clipboard(
+            PasteMethod::None,
+            ClipboardHandling::CopyToClipboard
+        ));
+    }
+
+    #[test]
+    fn clipboard_copy_mode_copies_for_active_methods() {
+        assert!(should_copy_result_to_clipboard(
+            PasteMethod::CtrlV,
+            ClipboardHandling::CopyToClipboard
+        ));
+        assert!(should_copy_result_to_clipboard(
+            PasteMethod::Direct,
+            ClipboardHandling::CopyToClipboard
+        ));
+    }
+
+    #[test]
+    fn dont_modify_mode_keeps_clipboard_for_active_methods() {
+        assert!(!should_copy_result_to_clipboard(
+            PasteMethod::CtrlV,
+            ClipboardHandling::DontModify
+        ));
+        assert!(!should_copy_result_to_clipboard(
+            PasteMethod::Direct,
+            ClipboardHandling::DontModify
+        ));
     }
 }

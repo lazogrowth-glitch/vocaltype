@@ -3,10 +3,11 @@
 //! This module provides shortcut functionality using Tauri's built-in
 //! global-shortcut plugin.
 
-use log::{error, warn};
+use log::{debug, error, warn};
 use tauri::AppHandle;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
+use crate::runtime_observability::{emit_runtime_error, RuntimeErrorStage};
 use crate::settings::{self, get_settings, ShortcutBinding};
 
 use super::handler::handle_shortcut_event;
@@ -79,6 +80,13 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
             "register_tauri_shortcut validation error for binding '{}': {}",
             binding.current_binding, e
         );
+        emit_runtime_error(
+            app,
+            "SHORTCUT_INVALID",
+            RuntimeErrorStage::Shortcut,
+            format!("Invalid shortcut '{}': {}", binding.current_binding, e),
+            true,
+        );
         return Err(e);
     }
 
@@ -91,15 +99,24 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
                 binding.current_binding, e
             );
             error!("register_tauri_shortcut parse error: {}", error_msg);
+            emit_runtime_error(
+                app,
+                "SHORTCUT_PARSE_ERROR",
+                RuntimeErrorStage::Shortcut,
+                error_msg.clone(),
+                true,
+            );
             return Err(error_msg);
         }
     };
 
-    // Prevent duplicate registrations that would silently shadow one another
+    // Idempotent registration: avoid duplicate errors for dynamic runtime shortcuts.
     if app.global_shortcut().is_registered(shortcut) {
-        let error_msg = format!("Shortcut '{}' is already in use", binding.current_binding);
-        warn!("register_tauri_shortcut duplicate error: {}", error_msg);
-        return Err(error_msg);
+        debug!(
+            "register_tauri_shortcut: '{}' already registered, skipping",
+            binding.current_binding
+        );
+        return Ok(());
     }
 
     // Clone binding.id for use in the closure
@@ -124,6 +141,13 @@ pub fn register_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<()
                 binding.current_binding, e
             );
             error!("register_tauri_shortcut registration error: {}", error_msg);
+            emit_runtime_error(
+                app,
+                "SHORTCUT_REGISTER_FAILED",
+                RuntimeErrorStage::Shortcut,
+                error_msg.clone(),
+                true,
+            );
             error_msg
         })?;
 
@@ -140,16 +164,40 @@ pub fn unregister_shortcut(app: &AppHandle, binding: ShortcutBinding) -> Result<
                 binding.current_binding, e
             );
             error!("unregister_tauri_shortcut parse error: {}", error_msg);
+            emit_runtime_error(
+                app,
+                "SHORTCUT_PARSE_ERROR",
+                RuntimeErrorStage::Shortcut,
+                error_msg.clone(),
+                true,
+            );
             return Err(error_msg);
         }
     };
+
+    if !app.global_shortcut().is_registered(shortcut) {
+        debug!(
+            "unregister_tauri_shortcut: '{}' already unregistered, skipping",
+            binding.current_binding
+        );
+        return Ok(());
+    }
 
     app.global_shortcut().unregister(shortcut).map_err(|e| {
         let error_msg = format!(
             "Failed to unregister shortcut '{}': {}",
             binding.current_binding, e
         );
-        error!("unregister_tauri_shortcut error: {}", error_msg);
+        // Downgraded to debug — unregister failures on Windows are benign
+        // (hotkey may already be unregistered) and spam the logs on every transcription.
+        debug!("unregister_tauri_shortcut: {}", error_msg);
+        emit_runtime_error(
+            app,
+            "SHORTCUT_UNREGISTER_FAILED",
+            RuntimeErrorStage::Shortcut,
+            error_msg.clone(),
+            true,
+        );
         error_msg
     })?;
 

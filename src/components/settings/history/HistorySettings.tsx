@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import { AudioPlayer } from "../../ui/AudioPlayer";
 import { Button } from "../../ui/Button";
 import {
@@ -93,11 +94,18 @@ export const HistorySettings: React.FC = () => {
     }
   };
 
-  const copyToClipboard = async (text: string) => {
+  const copyToClipboard = async (text: string): Promise<boolean> => {
     try {
       await navigator.clipboard.writeText(text);
+      return true;
     } catch (error) {
       console.error("Failed to copy to clipboard:", error);
+      toast.error(
+        t("settings.history.copyFailed", {
+          defaultValue: "Failed to copy transcription.",
+        }),
+      );
+      return false;
     }
   };
 
@@ -231,7 +239,7 @@ export const HistorySettings: React.FC = () => {
 interface HistoryEntryProps {
   entry: HistoryEntry;
   onToggleSaved: () => void;
-  onCopyText: () => void;
+  onCopyText: () => Promise<boolean>;
   getAudioUrl: (fileName: string) => Promise<string | null>;
   deleteAudio: (id: number) => Promise<void>;
 }
@@ -257,8 +265,11 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
     [getAudioUrl, entry.file_name],
   );
 
-  const handleCopyText = () => {
-    onCopyText();
+  const handleCopyText = async () => {
+    const copied = await onCopyText();
+    if (!copied) {
+      return;
+    }
     setShowCopied(true);
     setTimeout(() => setShowCopied(false), 2000);
   };
@@ -268,7 +279,7 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
       await deleteAudio(entry.id);
     } catch (error) {
       console.error("Failed to delete entry:", error);
-      alert("Failed to delete entry. Please try again.");
+      toast.error(t("settings.history.deleteError"));
     }
   };
 

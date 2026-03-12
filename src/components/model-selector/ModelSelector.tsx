@@ -110,7 +110,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
         setTimeout(async () => {
           try {
             const isRecording = await commands.isRecording();
-            if (!isRecording) {
+            if (!isRecording && !currentModel) {
               setPendingModelId(modelId);
               setModelError(null);
               setShowModelDropdown(false);
@@ -143,7 +143,7 @@ const ModelSelector: React.FC<ModelSelectorProps> = ({ onError }) => {
       modelStateUnlisten.then((fn) => fn());
       downloadCompleteUnlisten.then((fn) => fn());
     };
-  }, [selectModel]);
+  }, [currentModel, selectModel]);
 
   const handleModelSelect = async (modelId: string) => {
     if (modelId === "gemini-api") {

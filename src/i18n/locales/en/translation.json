@@ -46,11 +46,19 @@
       },
       "parakeet-tdt-0.6b-v2": {
         "name": "Parakeet V2",
-        "description": "Fast English-only option. Good when you want lower latency and can stay in English."
+        "description": "Fast English-only option. Excellent when the speaker stays in English and speed matters."
       },
       "parakeet-tdt-0.6b-v3": {
         "name": "Parakeet V3",
-        "description": "Experimental multilingual ONNX path. Fast, but currently less reliable than Whisper for critical French and mixed-language dictation."
+        "description": "Experimental multilingual ONNX path. Very fast and can work well when you stay in one language, but still less robust than Whisper for mixed-language dictation."
+      },
+      "parakeet-tdt-0.6b-v3-english": {
+        "name": "Parakeet V3 English",
+        "description": "English-first Parakeet profile. Full-context decoding (no segmentation) for top speed and stability in English."
+      },
+      "parakeet-tdt-0.6b-v3-multilingual": {
+        "name": "Parakeet V3 Multilingual",
+        "description": "Multilingual experimental profile tuned for French and non-English dictation with short segmented decoding."
       },
       "moonshine-base": {
         "name": "Moonshine Base",
@@ -112,7 +120,10 @@
       "bestDefault": "Best Default",
       "bestQuality": "Best Quality",
       "fastEnglish": "Fast English",
-      "experimental": "Experimental"
+      "experimental": "Experimental",
+      "english": "English",
+      "englishOnly": "English Only",
+      "multilingualExperimental": "Multilingual Experimental"
     },
     "custom": "Custom",
     "active": "Active",
@@ -459,6 +470,7 @@
       "loading": "Loading history...",
       "empty": "No transcriptions yet. Start recording to build your history!",
       "copyToClipboard": "Copy transcription to clipboard",
+      "copyFailed": "Failed to copy transcription.",
       "save": "Save transcription",
       "unsave": "Remove from saved",
       "delete": "Delete entry",
@@ -644,7 +656,10 @@
   "overlay": {
     "transcribing": "Transcribing...",
     "processing": "Processing...",
-    "cancelConfirm": "Esc again to cancel"
+    "cancelConfirm": "Esc again to cancel",
+    "pauseRecording": "Pause recording",
+    "resumeRecording": "Resume recording",
+    "cancelRecording": "Cancel recording"
   },
   "auth": {
     "trialBadge": "7-day free trial, no card required",
@@ -714,5 +729,12 @@
       "invalidResetCode": "Invalid or expired code.",
       "wrongOldPassword": "Current password is incorrect."
     }
+  },
+  "warnings": {
+    "whisperGpuUnavailable": "GPU not available — running on CPU",
+    "whisperGpuUnavailableDesc": "Transcription may be slow. Switch to Parakeet V3 for fast CPU performance.",
+    "pasteFailed": "Automatic paste failed",
+    "pasteFailedCopied": "Automatic paste failed — text copied to clipboard",
+    "pasteFailedDesc": "Reason: {{reason}}"
   }
 }

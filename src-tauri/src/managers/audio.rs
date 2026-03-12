@@ -8,6 +8,17 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 use tauri::Manager;
 
+const PARAKEET_V3_LEGACY_ID: &str = "parakeet-tdt-0.6b-v3";
+const PARAKEET_V3_ENGLISH_ID: &str = "parakeet-tdt-0.6b-v3-english";
+const PARAKEET_V3_MULTILINGUAL_ID: &str = "parakeet-tdt-0.6b-v3-multilingual";
+
+fn is_parakeet_v3_model_id(model_id: &str) -> bool {
+    matches!(
+        model_id,
+        PARAKEET_V3_LEGACY_ID | PARAKEET_V3_ENGLISH_ID | PARAKEET_V3_MULTILINGUAL_ID
+    )
+}
+
 fn set_mute(mute: bool) {
     // Expected behavior:
     // - Windows: works on most systems using standard audio drivers.
@@ -181,10 +192,25 @@ fn create_audio_recorder(
     vad_path: &str,
     app_handle: &tauri::AppHandle,
     is_paused: Arc<AtomicBool>,
+    selected_model_id: &str,
 ) -> Result<AudioRecorder, anyhow::Error> {
-    let silero = SileroVad::new(vad_path, 0.3)
+    let is_parakeet_v3 = is_parakeet_v3_model_id(selected_model_id);
+    let (vad_threshold, prefill_frames, hangover_frames, onset_frames) = if is_parakeet_v3 {
+        // Parakeet V3 is sensitive to clipped speech on short dictation.
+        // Use a less aggressive profile to reduce dropped words.
+        (0.24, 20, 20, 1)
+    } else {
+        (0.30, 15, 15, 2)
+    };
+
+    let silero = SileroVad::new(vad_path, vad_threshold)
         .map_err(|e| anyhow::anyhow!("Failed to create SileroVad: {}", e))?;
-    let smoothed_vad = SmoothedVad::new(Box::new(silero), 15, 15, 2);
+    let smoothed_vad = SmoothedVad::new(
+        Box::new(silero),
+        prefill_frames,
+        hangover_frames,
+        onset_frames,
+    );
 
     // Recorder with VAD plus a spectrum-level callback that forwards updates to
     // the frontend.
@@ -333,18 +359,19 @@ impl AudioRecordingManager {
                 tauri::path::BaseDirectory::Resource,
             )
             .map_err(|e| anyhow::anyhow!("Failed to resolve VAD path: {}", e))?;
+        let settings = get_settings(&self.app_handle);
         let mut recorder_opt = self.recorder.lock().unwrap();
 
-        if recorder_opt.is_none() {
-            *recorder_opt = Some(create_audio_recorder(
-                vad_path.to_str().unwrap(),
-                &self.app_handle,
-                Arc::clone(&self.is_paused),
-            )?);
-        }
+        // Recreate the recorder every time we (re)open the stream so model-dependent
+        // VAD tuning follows the currently selected model.
+        *recorder_opt = Some(create_audio_recorder(
+            vad_path.to_str().unwrap(),
+            &self.app_handle,
+            Arc::clone(&self.is_paused),
+            &settings.selected_model,
+        )?);
 
         // Get the selected device from settings, considering clamshell mode
-        let settings = get_settings(&self.app_handle);
         let selected_device = self.get_effective_microphone_device(&settings);
 
         if let Some(rec) = recorder_opt.as_mut() {
@@ -511,6 +538,10 @@ impl AudioRecordingManager {
             *self.state.lock().unwrap(),
             RecordingState::Recording { .. }
         )
+    }
+
+    pub fn is_paused(&self) -> bool {
+        self.is_paused.load(Ordering::Relaxed)
     }
 
     /// Returns a copy of all samples recorded so far without stopping the recording.

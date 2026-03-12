@@ -72,6 +72,17 @@ const getProductBadges = (
   if (model.id === "parakeet-tdt-0.6b-v2") {
     return [
       {
+        label: t("modelSelector.badges.englishOnly", {
+          defaultValue: "English Only",
+        }),
+        variant: "speed",
+      },
+    ];
+  }
+
+  if (model.id === "parakeet-tdt-0.6b-v3-english") {
+    return [
+      {
         label: t("modelSelector.badges.fastEnglish", {
           defaultValue: "Fast English",
         }),
@@ -80,11 +91,11 @@ const getProductBadges = (
     ];
   }
 
-  if (model.id === "parakeet-tdt-0.6b-v3") {
+  if (model.id === "parakeet-tdt-0.6b-v3-multilingual") {
     return [
       {
-        label: t("modelSelector.badges.experimental", {
-          defaultValue: "Experimental",
+        label: t("modelSelector.badges.multilingualExperimental", {
+          defaultValue: "Multilingual Experimental",
         }),
         variant: "experimental",
       },
