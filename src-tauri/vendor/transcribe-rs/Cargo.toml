@@ -221,5 +221,5 @@ optional = true
 
 [target.'cfg(target_os = "windows")'.dependencies.whisper-rs]
 version = "0.13.2"
-features = ["openmp"]
+features = ["vulkan", "openmp"]
 optional = true

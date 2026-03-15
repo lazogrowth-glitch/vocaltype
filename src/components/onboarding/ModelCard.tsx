@@ -47,13 +47,19 @@ const getProductBadges = (
   model: ModelInfo,
   t: (key: string, options?: Record<string, unknown>) => string,
 ): ProductBadge[] => {
-  if (model.id === "turbo") {
+  if (model.id === "parakeet-tdt-0.6b-v3-multilingual") {
     return [
       {
         label: t("modelSelector.badges.bestDefault", {
           defaultValue: "Best Default",
         }),
         variant: "primary",
+      },
+      {
+        label: t("modelSelector.badges.multilingualExperimental", {
+          defaultValue: "Multilingual",
+        }),
+        variant: "secondary",
       },
     ];
   }
@@ -87,17 +93,6 @@ const getProductBadges = (
           defaultValue: "Fast English",
         }),
         variant: "speed",
-      },
-    ];
-  }
-
-  if (model.id === "parakeet-tdt-0.6b-v3-multilingual") {
-    return [
-      {
-        label: t("modelSelector.badges.multilingualExperimental", {
-          defaultValue: "Multilingual Experimental",
-        }),
-        variant: "experimental",
       },
     ];
   }
@@ -255,7 +250,7 @@ const ModelCard: React.FC<ModelCardProps> = ({
                 </p>
                 <div className="w-16 h-1.5 bg-mid-gray/20 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-logo-primary rounded-full"
+                    className="h-full bg-emerald-400 rounded-full"
                     style={{ width: `${model.accuracy_score * 100}%` }}
                   />
                 </div>
@@ -266,7 +261,7 @@ const ModelCard: React.FC<ModelCardProps> = ({
                 </p>
                 <div className="w-16 h-1.5 bg-mid-gray/20 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-logo-primary rounded-full"
+                    className="h-full bg-sky-400 rounded-full"
                     style={{ width: `${model.speed_score * 100}%` }}
                   />
                 </div>

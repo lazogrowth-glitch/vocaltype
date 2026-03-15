@@ -20,6 +20,11 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
     () => (snapshot?.recent_errors ?? []).slice(-5).reverse(),
     [snapshot],
   );
+  const calibrationStates = useMemo(
+    () => (snapshot?.adaptive_calibration_state ?? []).slice().sort((a, b) => b.updated_at_ms - a.updated_at_ms),
+    [snapshot],
+  );
+  const adaptiveProfile = snapshot?.adaptive_machine_profile ?? null;
 
   const handleCapture = async () => {
     setBusy(true);
@@ -131,6 +136,129 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
                 snapshot.selected_model}
             </span>
           </p>
+          {adaptiveProfile && (
+            <>
+              <p>
+                {t("settings.debug.runtimeDiagnostics.recommendedModel", {
+                  defaultValue: "Recommended",
+                })}
+                :{" "}
+                <span className="font-semibold">
+                  {adaptiveProfile.recommended_model_id}
+                </span>
+              </p>
+              <p>
+                {t("settings.debug.runtimeDiagnostics.activeModel", {
+                  defaultValue: "Active now",
+                })}
+                :{" "}
+                <span className="font-semibold">
+                  {adaptiveProfile.active_runtime_model_id ||
+                    snapshot.loaded_model_id ||
+                    snapshot.selected_model}
+                </span>
+              </p>
+              <p>
+                {t("settings.debug.runtimeDiagnostics.machineTier", {
+                  defaultValue: "Machine tier",
+                })}
+                :{" "}
+                <span className="font-semibold">
+                  {adaptiveProfile.machine_tier} ({adaptiveProfile.machine_score_details.final_score.toFixed(2)})
+                </span>
+              </p>
+              <p>
+                {t("settings.debug.runtimeDiagnostics.gpu", {
+                  defaultValue: "GPU",
+                })}
+                :{" "}
+                <span className="font-semibold">
+                  {adaptiveProfile.gpu_kind}
+                </span>
+                {adaptiveProfile.gpu_name ? ` · ${adaptiveProfile.gpu_name}` : ""}
+              </p>
+              <p>
+                {t("settings.debug.runtimeDiagnostics.npu", {
+                  defaultValue: "NPU",
+                })}
+                :{" "}
+                <span className="font-semibold">
+                  {adaptiveProfile.npu_kind}
+                </span>
+                {adaptiveProfile.npu_name ? ` · ${adaptiveProfile.npu_name}` : ""}
+                {" · "}
+                <span className="text-text/60">
+                  {t("settings.debug.runtimeDiagnostics.copilotPlus", {
+                    defaultValue: "Copilot+",
+                  })}
+                  :{" "}
+                  {adaptiveProfile.copilot_plus_detected
+                    ? t("common.yes", { defaultValue: "yes" })
+                    : t("common.no", { defaultValue: "no" })}
+                </span>
+              </p>
+              <p>
+                {t("settings.debug.runtimeDiagnostics.backend", {
+                  defaultValue: "Whisper backend",
+                })}
+                :{" "}
+                <span className="font-semibold">
+                  {adaptiveProfile.active_backend || "n/a"}
+                </span>
+                {" / "}
+                <span className="text-text/60">
+                  {t("settings.debug.runtimeDiagnostics.recommended", {
+                    defaultValue: "recommended",
+                  })}
+                  : {adaptiveProfile.recommended_backend || "n/a"}
+                </span>
+              </p>
+              <p>
+                {t("settings.debug.runtimeDiagnostics.power", {
+                  defaultValue: "Power",
+                })}
+                :{" "}
+                <span className="font-semibold">
+                  {adaptiveProfile.power_mode}
+                </span>
+                {" · "}
+                <span className="text-text/60">
+                  {t("settings.debug.runtimeDiagnostics.battery", {
+                    defaultValue: "battery",
+                  })}
+                  :{" "}
+                  {adaptiveProfile.on_battery == null
+                    ? t("settings.debug.runtimeDiagnostics.unknown", {
+                        defaultValue: "unknown",
+                      })
+                    : adaptiveProfile.on_battery
+                      ? t("common.yes", { defaultValue: "yes" })
+                      : t("common.no", { defaultValue: "no" })}
+                </span>
+                {" · "}
+                <span className="text-text/60">
+                  {t("settings.debug.runtimeDiagnostics.thermal", {
+                    defaultValue: "thermal",
+                  })}
+                  :{" "}
+                  {adaptiveProfile.thermal_degraded
+                    ? t("common.yes", { defaultValue: "yes" })
+                    : t("common.no", { defaultValue: "no" })}
+                </span>
+              </p>
+              {adaptiveProfile.large_skip_reason && (
+                <p>
+                  {t("settings.debug.runtimeDiagnostics.largeSkip", {
+                    defaultValue: "Large skipped",
+                  })}
+                  :{" "}
+                  <span className="text-text/60">
+                    {adaptiveProfile.large_skip_reason}
+                  </span>
+                </p>
+              )}
+            </>
+          )}
           <p>
             {t("settings.debug.runtimeDiagnostics.pasteMethod", {
               defaultValue: "Paste method",
@@ -143,6 +271,40 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
             })}
             : {new Date(snapshot.captured_at_ms).toLocaleString(i18n.language)}
           </p>
+          {snapshot.current_app_context && (
+            <p>
+              {t("settings.debug.runtimeDiagnostics.currentAppContext", {
+                defaultValue: "Current app context",
+              })}
+              :{" "}
+              <span className="font-semibold">
+                {snapshot.current_app_context.category}
+              </span>
+              {snapshot.current_app_context.process_name
+                ? ` · ${snapshot.current_app_context.process_name}`
+                : ""}
+              {snapshot.current_app_context.window_title
+                ? ` · ${snapshot.current_app_context.window_title}`
+                : ""}
+            </p>
+          )}
+          {snapshot.last_transcription_app_context && (
+            <p>
+              {t("settings.debug.runtimeDiagnostics.lastAppContext", {
+                defaultValue: "Last transcription context",
+              })}
+              :{" "}
+              <span className="font-semibold">
+                {snapshot.last_transcription_app_context.category}
+              </span>
+              {snapshot.last_transcription_app_context.process_name
+                ? ` · ${snapshot.last_transcription_app_context.process_name}`
+                : ""}
+              {snapshot.last_transcription_app_context.window_title
+                ? ` · ${snapshot.last_transcription_app_context.window_title}`
+                : ""}
+            </p>
+          )}
           {recentErrors.length > 0 && (
             <div className="pt-1">
               <p className="font-semibold mb-1">
@@ -153,6 +315,21 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
               {recentErrors.map((err) => (
                 <p key={`${err.code}-${err.timestamp_ms}`} className="truncate">
                   [{err.stage}] {err.code}: {err.message}
+                </p>
+              ))}
+            </div>
+          )}
+          {calibrationStates.length > 0 && (
+            <div className="pt-1">
+              <p className="font-semibold mb-1">
+                {t("settings.debug.runtimeDiagnostics.calibration", {
+                  defaultValue: "Adaptive calibration",
+                })}
+              </p>
+              {calibrationStates.slice(0, 4).map((entry) => (
+                <p key={`${entry.model_id}-${entry.phase}`} className="truncate">
+                  {entry.model_id} [{entry.phase}] {entry.state}
+                  {entry.detail ? ` — ${entry.detail}` : ""}
                 </p>
               ))}
             </div>

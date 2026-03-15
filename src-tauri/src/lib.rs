@@ -1,4 +1,5 @@
 mod actions;
+mod adaptive_runtime;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 mod apple_intelligence;
 mod audio_feedback;
@@ -6,12 +7,14 @@ pub mod audio_toolkit;
 pub mod cli;
 mod clipboard;
 mod commands;
+mod context_detector;
 pub mod gemini_client;
 mod helpers;
 mod input;
 mod llm_client;
 mod managers;
 mod overlay;
+mod prompt_builder;
 mod runtime_observability;
 mod settings;
 mod shortcut;
@@ -20,6 +23,7 @@ mod transcription_coordinator;
 mod tray;
 mod tray_i18n;
 mod utils;
+mod vocabulary_store;
 
 pub use cli::CliArgs;
 #[cfg(debug_assertions)]
@@ -48,6 +52,7 @@ use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_log::{Builder as LogBuilder, RotationStrategy, Target, TargetKind};
 
 use crate::settings::get_settings;
+use adaptive_runtime::maybe_schedule_whisper_calibration;
 
 // Global atomic to store the file log level filter
 // We use u8 to store the log::LevelFilter as a number
@@ -168,6 +173,25 @@ fn initialize_core_logic(app_handle: &AppHandle) -> Result<(), String> {
         });
     }
 
+    {
+        let app_handle = app_handle.clone();
+        let model_manager = model_manager.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(3));
+            maybe_schedule_whisper_calibration(&app_handle, model_manager, "small");
+        });
+    }
+
+    {
+        let app_handle = app_handle.clone();
+        let model_manager = model_manager.clone();
+        thread::spawn(move || {
+            thread::sleep(Duration::from_secs(5));
+            maybe_schedule_whisper_calibration(&app_handle, model_manager.clone(), "turbo");
+            maybe_schedule_whisper_calibration(&app_handle, model_manager, "large");
+        });
+    }
+
     // Note: Shortcuts are NOT initialized here.
     // The frontend is responsible for calling the `initialize_shortcuts` command
     // after permissions are confirmed (on macOS) or after onboarding completes.
@@ -279,22 +303,58 @@ fn initialize_core_logic(app_handle: &AppHandle) -> Result<(), String> {
         tray::update_tray_menu(&app_handle_for_listener, &tray::TrayIconState::Idle, None);
     });
 
-    // Get the autostart manager and configure based on user setting
-    let autostart_manager = app_handle.autolaunch();
-    let settings = settings::get_settings(&app_handle);
-
-    if settings.autostart_enabled {
-        // Enable autostart if user has opted in
-        let _ = autostart_manager.enable();
-    } else {
-        // Disable autostart if user has opted out
-        let _ = autostart_manager.disable();
-    }
+    sync_autostart_state(app_handle);
 
     // Create the recording overlay window (hidden by default)
     utils::create_recording_overlay(app_handle);
 
     Ok(())
+}
+
+fn sync_autostart_state(app_handle: &AppHandle) {
+    let autostart_manager = app_handle.autolaunch();
+
+    #[cfg(debug_assertions)]
+    {
+        let mut settings = settings::get_settings(app_handle);
+
+        if settings.autostart_enabled {
+            log::warn!(
+                "Autostart was enabled from a debug build. Disabling it to avoid launching a development executable at login."
+            );
+            settings.autostart_enabled = false;
+            settings::write_settings(app_handle, settings);
+        }
+
+        if let Err(err) = autostart_manager.disable() {
+            log::warn!("Failed to disable autostart for debug build: {}", err);
+        }
+
+        return;
+    }
+
+    #[cfg(not(debug_assertions))]
+    {
+        let settings = settings::get_settings(app_handle);
+
+        let result = if settings.autostart_enabled {
+            autostart_manager.enable()
+        } else {
+            autostart_manager.disable()
+        };
+
+        if let Err(err) = result {
+            log::warn!("Failed to sync autostart setting: {}", err);
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+fn should_export_typescript_bindings() -> bool {
+    matches!(
+        std::env::var("VOCALTYPE_EXPORT_BINDINGS").as_deref(),
+        Ok("1") | Ok("true") | Ok("TRUE") | Ok("yes") | Ok("YES")
+    )
 }
 
 #[tauri::command]
@@ -329,6 +389,7 @@ pub fn run(cli_args: CliArgs) {
         shortcut::change_overlay_position_setting,
         shortcut::change_debug_mode_setting,
         shortcut::change_word_correction_threshold_setting,
+        shortcut::change_adaptive_vocabulary_enabled_setting,
         shortcut::change_paste_method_setting,
         shortcut::get_available_typing_tools,
         shortcut::change_typing_tool_setting,
@@ -384,6 +445,10 @@ pub fn run(cli_args: CliArgs) {
         commands::initialize_shortcuts,
         commands::get_runtime_diagnostics,
         commands::export_runtime_diagnostics,
+        commands::get_current_app_context,
+        commands::get_adaptive_runtime_profile,
+        commands::get_adaptive_calibration_state,
+        commands::recalibrate_whisper_model_command,
         commands::models::get_available_models,
         commands::models::get_model_info,
         commands::models::download_model,
@@ -423,13 +488,15 @@ pub fn run(cli_args: CliArgs) {
         helpers::clamshell::is_laptop,
     ]);
 
-    #[cfg(debug_assertions)] // <- Only export on non-release builds
-    specta_builder
-        .export(
-            Typescript::default().bigint(BigIntExportBehavior::Number),
-            "../src/bindings.ts",
-        )
-        .unwrap_or_else(|err| eprintln!("Failed to export typescript bindings: {}", err));
+    #[cfg(debug_assertions)]
+    if should_export_typescript_bindings() {
+        specta_builder
+            .export(
+                Typescript::default().bigint(BigIntExportBehavior::Number),
+                "../src/bindings.ts",
+            )
+            .unwrap_or_else(|err| eprintln!("Failed to export typescript bindings: {}", err));
+    }
 
     let builder = tauri::Builder::default()
         .device_event_filter(tauri::DeviceEventFilter::Always)
@@ -506,6 +573,12 @@ pub fn run(cli_args: CliArgs) {
             app.manage(TranscriptionCoordinator::new(app_handle.clone()));
             app.manage(actions::ActiveActionState(std::sync::Mutex::new(None)));
             app.manage(actions::ActiveChunkingHandle(std::sync::Mutex::new(None)));
+            app.manage(context_detector::ActiveAppContextState(std::sync::Mutex::new(
+                context_detector::ActiveAppContextSnapshot::default(),
+            )));
+            app.manage(vocabulary_store::VocabularyStoreState(std::sync::Mutex::new(
+                vocabulary_store::VocabularyStore::load(&app_handle),
+            )));
             app.manage(runtime_observability::RuntimeObservabilityState::new());
 
             initialize_core_logic(&app_handle)?;

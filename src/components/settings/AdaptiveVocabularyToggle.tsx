@@ -1,0 +1,35 @@
+import React from "react";
+import { useTranslation } from "react-i18next";
+import { ToggleSwitch } from "../ui/ToggleSwitch";
+import { useSettings } from "../../hooks/useSettings";
+
+interface AdaptiveVocabularyToggleProps {
+  descriptionMode?: "inline" | "tooltip";
+  grouped?: boolean;
+}
+
+export const AdaptiveVocabularyToggle: React.FC<AdaptiveVocabularyToggleProps> =
+  React.memo(({ descriptionMode = "tooltip", grouped = false }) => {
+    const { t } = useTranslation();
+    const { getSetting, updateSetting, isUpdating } = useSettings();
+
+    const enabled = getSetting("adaptive_vocabulary_enabled") ?? false;
+
+    return (
+      <ToggleSwitch
+        checked={enabled}
+        onChange={(value) => updateSetting("adaptive_vocabulary_enabled", value)}
+        isUpdating={isUpdating("adaptive_vocabulary_enabled")}
+        label={t("settings.advanced.adaptiveVocabulary.label", {
+          defaultValue: "Adaptive vocabulary",
+        })}
+        description={t("settings.advanced.adaptiveVocabulary.description", {
+          defaultValue:
+            "Learn custom spellings per app context on this device and feed them into Whisper prompts.",
+        })}
+        descriptionMode={descriptionMode}
+        grouped={grouped}
+        tooltipPosition="bottom"
+      />
+    );
+  });

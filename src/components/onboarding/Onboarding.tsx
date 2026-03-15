@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import type { ModelInfo } from "@/bindings";
@@ -7,9 +8,19 @@ import ModelCard from "./ModelCard";
 import VocalTypeLogo from "../icons/VocalTypeLogo";
 import { useModelStore } from "../../stores/modelStore";
 
+interface AdaptiveProfileSnapshot {
+  machine_tier: "low" | "medium" | "high";
+  recommended_model_id: string;
+  npu_detected?: boolean;
+  npu_kind?: "none" | "qualcomm" | "intel" | "amd" | "unknown";
+  copilot_plus_detected?: boolean;
+}
+
 const getOnboardingRank = (model: ModelInfo): number => {
-  if (model.id === "turbo") return 1000;
+  if (model.id === "parakeet-tdt-0.6b-v3-multilingual") return 1000;
+  if (model.id === "parakeet-tdt-0.6b-v3-english") return 980;
   if (model.id === "large") return 950;
+  if (model.id === "turbo") return 900;
   if (model.id === "parakeet-tdt-0.6b-v2") return 850;
   if (model.id === "medium") return 800;
   if (model.id === "small") return 700;
@@ -19,8 +30,6 @@ const getOnboardingRank = (model: ModelInfo): number => {
   if (model.id === "moonshine-small-streaming-en") return 540;
   if (model.id === "moonshine-base") return 520;
   if (model.id === "moonshine-tiny-streaming-en") return 500;
-  if (model.id === "parakeet-tdt-0.6b-v3-english") return 360;
-  if (model.id === "parakeet-tdt-0.6b-v3-multilingual") return 340;
   if (model.id === "gemini-api") return 200;
   return Math.round(model.accuracy_score * 1000 + model.speed_score * 100);
 };
@@ -30,7 +39,7 @@ interface OnboardingProps {
 }
 
 const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const {
     models,
     downloadModel,
@@ -41,10 +50,18 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
     downloadStats,
   } = useModelStore();
   const [selectedModelId, setSelectedModelId] = useState<string | null>(null);
+  const [adaptiveProfile, setAdaptiveProfile] =
+    useState<AdaptiveProfileSnapshot | null>(null);
 
   const isDownloading = selectedModelId !== null;
 
   // Watch for the selected model to finish downloading + extracting
+  useEffect(() => {
+    invoke<AdaptiveProfileSnapshot | null>("get_adaptive_runtime_profile")
+      .then((profile) => setAdaptiveProfile(profile))
+      .catch(() => setAdaptiveProfile(null));
+  }, []);
+
   useEffect(() => {
     if (!selectedModelId) return;
 
@@ -96,6 +113,53 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
     return downloadStats[modelId]?.speed;
   };
 
+  const modeCards = (() => {
+    const appIsEnglish = i18n.language.startsWith("en");
+    const rapidId = (appIsEnglish ? "parakeet-tdt-0.6b-v3-english" : "parakeet-tdt-0.6b-v3-multilingual");
+    const balancedId =
+      adaptiveProfile?.machine_tier === "low" ? "small" : "turbo";
+    const qualityId = "large";
+    return [
+      {
+        id: "auto",
+        title: t("onboarding.mode.auto", { defaultValue: "Auto" }),
+        description: t("onboarding.mode.autoDescription", {
+          defaultValue: "Best match for this machine",
+        }),
+        modelId: adaptiveProfile?.recommended_model_id ?? rapidId,
+      },
+      {
+        id: "fast",
+        title: t("onboarding.mode.fast", { defaultValue: "Rapide" }),
+        description: t("onboarding.mode.fastDescription", {
+          defaultValue: "Lowest latency for quick dictation",
+        }),
+        modelId: rapidId,
+      },
+      {
+        id: "balanced",
+        title: t("onboarding.mode.balanced", {
+          defaultValue: "Équilibré",
+        }),
+        description: t("onboarding.mode.balancedDescription", {
+          defaultValue: "Better quality without going too heavy",
+        }),
+        modelId: balancedId,
+      },
+      {
+        id: "quality",
+        title: t("onboarding.mode.quality", { defaultValue: "Qualité" }),
+        description: t("onboarding.mode.qualityDescription", {
+          defaultValue: "Best text quality on stronger machines",
+        }),
+        modelId: qualityId,
+      },
+    ].map((entry) => ({
+      ...entry,
+      model: models.find((model) => model.id === entry.modelId) ?? null,
+    }));
+  })();
+
   return (
     <div className="h-screen w-screen flex flex-col p-6 gap-4 inset-0">
       <div className="flex flex-col items-center gap-2 shrink-0">
@@ -106,6 +170,61 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
       </div>
 
       <div className="max-w-[600px] w-full mx-auto text-center flex-1 flex flex-col min-h-0">
+        {(adaptiveProfile?.copilot_plus_detected ||
+          adaptiveProfile?.npu_detected) && (
+          <div className="mb-4 rounded-xl border border-logo-primary/25 bg-logo-primary/5 px-4 py-3 text-left">
+            <p className="text-sm font-semibold text-text">
+              {adaptiveProfile?.copilot_plus_detected
+                ? t("onboarding.hardware.copilotPlusTitle", {
+                    defaultValue: "Copilot+ PC detected",
+                  })
+                : t("onboarding.hardware.npuTitle", {
+                    defaultValue: "NPU detected",
+                  })}
+            </p>
+            <p className="text-xs text-text/60 mt-1">
+              {adaptiveProfile?.copilot_plus_detected
+                ? t("onboarding.hardware.copilotPlusDescription", {
+                    defaultValue:
+                      "This device includes an NPU class associated with Copilot+ PCs. VocalType now tracks that capability in its adaptive profile.",
+                  })
+                : t("onboarding.hardware.npuDescription", {
+                    defaultValue:
+                      "This device exposes a neural processor. VocalType now includes it in machine detection and diagnostics.",
+                  })}
+            </p>
+          </div>
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-4">
+          {modeCards.map(({ id, title, description, modelId, model }) => {
+            const unavailable = !model;
+            return (
+              <button
+                key={id}
+                type="button"
+                disabled={isDownloading || unavailable}
+                onClick={() => handleDownloadModel(modelId)}
+                className="rounded-xl border border-mid-gray/20 bg-mid-gray/5 hover:border-logo-primary/40 hover:bg-logo-primary/5 text-left p-4 transition-all disabled:opacity-50"
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-text">{title}</p>
+                    <p className="text-xs text-text/60 mt-1">{description}</p>
+                  </div>
+                  {id === "auto" && (
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-logo-primary">
+                      {t("onboarding.recommended")}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-text/50 mt-3">
+                  {model?.name ?? modelId}
+                </p>
+              </button>
+            );
+          })}
+        </div>
+
         <div className="flex flex-col gap-4 pb-6">
           {models
             .filter((m: ModelInfo) => !m.is_downloaded)

@@ -139,6 +139,23 @@ pub struct WhisperInferenceParams {
 
     /// Force single segment output. Fastest for short dictation clips (< ~30s).
     pub single_segment: bool,
+
+    /// Do not reuse text context from previous decoder runs.
+    /// Useful when transcribing independent dictation chunks.
+    pub no_context: bool,
+
+    /// Initial decoding temperature.
+    pub temperature: Option<f32>,
+
+    /// Temperature increment used for fallback retries.
+    /// Set to 0.0 to disable expensive retry ladders.
+    pub temperature_inc: Option<f32>,
+
+    /// Entropy threshold used to decide whether the decoder should retry.
+    pub entropy_thold: Option<f32>,
+
+    /// Average log-probability threshold used to decide whether the decoder should retry.
+    pub logprob_thold: Option<f32>,
 }
 
 impl Default for WhisperInferenceParams {
@@ -159,6 +176,11 @@ impl Default for WhisperInferenceParams {
             debug_mode: false,
             no_timestamps: false,
             single_segment: false,
+            no_context: false,
+            temperature: None,
+            temperature_inc: None,
+            entropy_thold: None,
+            logprob_thold: None,
         }
     }
 }
@@ -290,9 +312,26 @@ impl TranscriptionEngine for WhisperEngine {
         full_params.set_debug_mode(whisper_params.debug_mode);
         full_params.set_no_timestamps(whisper_params.no_timestamps);
         full_params.set_single_segment(whisper_params.single_segment);
+        full_params.set_no_context(whisper_params.no_context);
 
         if let Some(n_threads) = whisper_params.n_threads {
             full_params.set_n_threads(n_threads);
+        }
+
+        if let Some(temperature) = whisper_params.temperature {
+            full_params.set_temperature(temperature);
+        }
+
+        if let Some(temperature_inc) = whisper_params.temperature_inc {
+            full_params.set_temperature_inc(temperature_inc);
+        }
+
+        if let Some(entropy_thold) = whisper_params.entropy_thold {
+            full_params.set_entropy_thold(entropy_thold);
+        }
+
+        if let Some(logprob_thold) = whisper_params.logprob_thold {
+            full_params.set_logprob_thold(logprob_thold);
         }
 
         if let Some(ref prompt) = whisper_params.initial_prompt {

@@ -47,6 +47,7 @@ default = [
 directml = ["ort/directml"]
 load-dynamic = ["ort/load-dynamic"]
 openvino = ["ort/openvino"]
+qnn = ["ort/qnn"]
 ort-defaults = ["ort/default"]
 rocm = ["ort/rocm"]
 sortformer = []

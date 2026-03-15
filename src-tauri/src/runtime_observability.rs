@@ -1,6 +1,8 @@
+use crate::adaptive_runtime::{get_calibration_states, CalibrationStatusSnapshot};
+use crate::context_detector::{detect_current_app_context, ActiveAppContextState, AppTranscriptionContext};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::transcription::TranscriptionManager;
-use crate::settings::get_settings;
+use crate::settings::{get_settings, AdaptiveMachineProfile};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::collections::VecDeque;
@@ -9,6 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter, Manager};
 
 const MAX_RUNTIME_ERRORS: usize = 100;
+const MAX_PIPELINE_PROFILES: usize = 50;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
@@ -53,6 +56,28 @@ pub struct RuntimeErrorEvent {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct PipelineStepTiming {
+    pub step: String,
+    pub duration_ms: u64,
+    pub detail: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct PipelineProfileEvent {
+    pub binding_id: String,
+    pub created_at_ms: u64,
+    pub path: String,
+    pub model_id: Option<String>,
+    pub model_name: Option<String>,
+    pub audio_duration_ms: Option<u64>,
+    pub transcription_chars: usize,
+    pub total_duration_ms: u64,
+    pub completed: bool,
+    pub error_code: Option<String>,
+    pub steps: Vec<PipelineStepTiming>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct RuntimeDiagnostics {
     pub captured_at_ms: u64,
     pub app_version: String,
@@ -70,12 +95,18 @@ pub struct RuntimeDiagnostics {
     pub selected_output_device: Option<String>,
     pub is_recording: bool,
     pub is_paused: bool,
+    pub current_app_context: Option<AppTranscriptionContext>,
+    pub last_transcription_app_context: Option<AppTranscriptionContext>,
+    pub recent_pipeline_profiles: Vec<PipelineProfileEvent>,
+    pub adaptive_machine_profile: Option<AdaptiveMachineProfile>,
+    pub adaptive_calibration_state: Vec<CalibrationStatusSnapshot>,
 }
 
 pub struct RuntimeObservabilityState {
     lifecycle_state: Mutex<TranscriptionLifecycleState>,
     last_lifecycle_event: Mutex<LifecycleStateEvent>,
     recent_errors: Mutex<VecDeque<RuntimeErrorEvent>>,
+    recent_pipeline_profiles: Mutex<VecDeque<PipelineProfileEvent>>,
 }
 
 impl RuntimeObservabilityState {
@@ -90,6 +121,7 @@ impl RuntimeObservabilityState {
                 timestamp_ms: now,
             }),
             recent_errors: Mutex::new(VecDeque::new()),
+            recent_pipeline_profiles: Mutex::new(VecDeque::new()),
         }
     }
 
@@ -106,17 +138,32 @@ impl RuntimeObservabilityState {
         }
     }
 
+    fn push_pipeline_profile(&self, profile: PipelineProfileEvent) {
+        let mut profiles = self.recent_pipeline_profiles.lock().unwrap();
+        profiles.push_back(profile);
+        while profiles.len() > MAX_PIPELINE_PROFILES {
+            profiles.pop_front();
+        }
+    }
+
     pub fn snapshot(
         &self,
     ) -> (
         TranscriptionLifecycleState,
         LifecycleStateEvent,
         Vec<RuntimeErrorEvent>,
+        Vec<PipelineProfileEvent>,
     ) {
         (
             *self.lifecycle_state.lock().unwrap(),
             self.last_lifecycle_event.lock().unwrap().clone(),
             self.recent_errors.lock().unwrap().iter().cloned().collect(),
+            self.recent_pipeline_profiles
+                .lock()
+                .unwrap()
+                .iter()
+                .cloned()
+                .collect(),
         )
     }
 }
@@ -176,12 +223,33 @@ pub fn emit_runtime_error(
     let _ = app.emit("runtime-error", event);
 }
 
+pub fn emit_pipeline_profile(app: &AppHandle, profile: PipelineProfileEvent) {
+    if let Some(obs) = app.try_state::<RuntimeObservabilityState>() {
+        obs.push_pipeline_profile(profile.clone());
+    }
+
+    log::info!(
+        "Pipeline profile [{}] model={:?} total={}ms steps={}",
+        profile.binding_id,
+        profile.model_id,
+        profile.total_duration_ms,
+        profile
+            .steps
+            .iter()
+            .map(|step| format!("{}={}ms", step.step, step.duration_ms))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let _ = app.emit("pipeline-profile", profile);
+}
+
 pub fn collect_runtime_diagnostics(app: &AppHandle) -> RuntimeDiagnostics {
     let settings = get_settings(app);
     let tm = app.state::<std::sync::Arc<TranscriptionManager>>();
     let am = app.state::<std::sync::Arc<AudioRecordingManager>>();
+    let active_context_state = app.try_state::<ActiveAppContextState>();
 
-    let (lifecycle_state, last_lifecycle_event, recent_errors) =
+    let (lifecycle_state, last_lifecycle_event, recent_errors, recent_pipeline_profiles) =
         if let Some(obs) = app.try_state::<RuntimeObservabilityState>() {
             obs.snapshot()
         } else {
@@ -191,7 +259,12 @@ pub fn collect_runtime_diagnostics(app: &AppHandle) -> RuntimeDiagnostics {
                 detail: Some("observability-uninitialized".to_string()),
                 timestamp_ms: now_ms(),
             };
-            (TranscriptionLifecycleState::Idle, fallback, Vec::new())
+            (
+                TranscriptionLifecycleState::Idle,
+                fallback,
+                Vec::new(),
+                Vec::new(),
+            )
         };
 
     RuntimeDiagnostics {
@@ -211,6 +284,14 @@ pub fn collect_runtime_diagnostics(app: &AppHandle) -> RuntimeDiagnostics {
         selected_output_device: settings.selected_output_device,
         is_recording: am.is_recording(),
         is_paused: am.is_paused(),
+        current_app_context: Some(detect_current_app_context()),
+        last_transcription_app_context: active_context_state
+            .as_ref()
+            .and_then(|state| state.0.lock().ok())
+            .and_then(|snapshot| snapshot.last_transcription_context()),
+        recent_pipeline_profiles,
+        adaptive_machine_profile: settings.adaptive_machine_profile,
+        adaptive_calibration_state: get_calibration_states(),
     }
 }
 
@@ -231,7 +312,7 @@ mod tests {
             });
         }
 
-        let (_, _, errors) = state.snapshot();
+        let (_, _, errors, _) = state.snapshot();
         assert_eq!(errors.len(), MAX_RUNTIME_ERRORS);
         assert_eq!(errors.first().unwrap().code, "E25");
         assert_eq!(

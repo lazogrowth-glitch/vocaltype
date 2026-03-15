@@ -1,16 +1,25 @@
 use crate::audio_toolkit::{apply_custom_words, filter_transcription_output};
+use crate::context_detector::{AppContextCategory, AppTranscriptionContext};
 use crate::managers::model::{EngineType, ModelManager};
-use crate::settings::{get_settings, ModelUnloadTimeout};
+use crate::prompt_builder::build_whisper_initial_prompt;
+use crate::settings::{
+    get_settings, record_whisper_backend_failure, set_active_runtime_model,
+    set_active_whisper_backend, ModelUnloadTimeout, NpuKind, WhisperBackendPreference,
+};
+use crate::vocabulary_store::VocabularyStoreState;
 use anyhow::Result;
 use log::{debug, error, info, warn};
-use parakeet_rs::{ParakeetTDT, TimestampMode as ParakeetTimestampMode, Transcriber};
+use parakeet_rs::{
+    ExecutionConfig as ParakeetExecutionConfig, ExecutionProvider as ParakeetExecutionProvider,
+    ParakeetTDT, TimestampMode as ParakeetTimestampMode, Transcriber,
+};
 use serde::Serialize;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread;
 use std::time::{Duration, SystemTime};
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use transcribe_rs::{
     engines::{
         moonshine::{
@@ -41,12 +50,81 @@ fn is_parakeet_v3_model(model_id: &str) -> bool {
     )
 }
 
+#[cfg(target_os = "windows")]
+fn parakeet_provider_label(provider: ParakeetExecutionProvider) -> &'static str {
+    match provider {
+        ParakeetExecutionProvider::Cpu => "cpu",
+        ParakeetExecutionProvider::Qnn => "qnn",
+        ParakeetExecutionProvider::DirectML => "directml",
+        ParakeetExecutionProvider::OpenVINO => "openvino",
+        ParakeetExecutionProvider::OpenVinoNpu => "openvino-npu",
+        ParakeetExecutionProvider::OpenVinoGpu => "openvino-gpu",
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn parakeet_provider_label(provider: ParakeetExecutionProvider) -> &'static str {
+    match provider {
+        ParakeetExecutionProvider::Cpu => "cpu",
+        #[allow(unreachable_patterns)]
+        _ => "cpu",
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn parakeet_v3_provider_candidates(app_handle: &AppHandle) -> Vec<ParakeetExecutionProvider> {
+    let settings = get_settings(app_handle);
+    let Some(profile) = settings.adaptive_machine_profile else {
+        return vec![ParakeetExecutionProvider::Cpu];
+    };
+
+    let mut providers = Vec::new();
+
+    match profile.npu_kind {
+        NpuKind::Qualcomm => {
+            providers.push(ParakeetExecutionProvider::Qnn);
+        }
+        NpuKind::Intel => {
+            providers.push(ParakeetExecutionProvider::OpenVinoNpu);
+            providers.push(ParakeetExecutionProvider::OpenVINO);
+        }
+        NpuKind::Amd | NpuKind::Unknown | NpuKind::None => {}
+    }
+
+    providers.push(ParakeetExecutionProvider::Cpu);
+    providers.dedup();
+    providers
+}
+
+#[cfg(not(target_os = "windows"))]
+fn parakeet_v3_provider_candidates(_app_handle: &AppHandle) -> Vec<ParakeetExecutionProvider> {
+    vec![ParakeetExecutionProvider::Cpu]
+}
+
+fn parakeet_v3_execution_config(provider: ParakeetExecutionProvider) -> ParakeetExecutionConfig {
+    let intra_threads = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(4)
+        .min(8);
+
+    ParakeetExecutionConfig::new()
+        .with_execution_provider(provider)
+        .with_intra_threads(intra_threads)
+        .with_inter_threads(1)
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct ModelStateEvent {
     pub event_type: String,
     pub model_id: Option<String>,
     pub model_name: Option<String>,
     pub error: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TranscriptionRequest {
+    pub audio: Vec<f32>,
+    pub app_context: Option<AppTranscriptionContext>,
 }
 
 enum LoadedEngine {
@@ -65,6 +143,7 @@ pub struct TranscriptionManager {
     model_manager: Arc<ModelManager>,
     app_handle: AppHandle,
     current_model_id: Arc<Mutex<Option<String>>>,
+    whisper_gpu_active: Arc<AtomicBool>,
     last_activity: Arc<AtomicU64>,
     shutdown_signal: Arc<AtomicBool>,
     watcher_handle: Arc<Mutex<Option<thread::JoinHandle<()>>>>,
@@ -73,26 +152,69 @@ pub struct TranscriptionManager {
 }
 
 impl TranscriptionManager {
-    fn recommended_whisper_threads() -> i32 {
+    fn recommended_whisper_threads(&self, model_id: Option<&str>, whisper_gpu_active: bool) -> i32 {
+        let settings = get_settings(&self.app_handle);
+        if let Some(model_id) = model_id {
+            if let Some(config) = settings.adaptive_whisper_config(model_id) {
+                return i32::from(config.threads.max(1));
+            }
+        }
+
         let available = std::thread::available_parallelism()
             .map(|n| n.get())
             .unwrap_or(4);
-        available.min(8) as i32
+        let max_threads = if whisper_gpu_active {
+            match model_id {
+                Some("small") => 8,
+                Some("medium") => 6,
+                Some("turbo") => 8,
+                Some("large") => 4,
+                _ => 6,
+            }
+        } else {
+            match model_id {
+                Some("small") => 8,
+                Some("medium") => 6,
+                Some("turbo") => 6,
+                Some("large") => 4,
+                _ => 6,
+            }
+        };
+
+        available.min(max_threads).max(1) as i32
     }
 
-    fn whisper_model_params() -> WhisperModelParams {
+    fn whisper_model_params(&self, model_id: &str) -> WhisperModelParams {
+        let settings = get_settings(&self.app_handle);
+        let backend_preference = settings
+            .adaptive_whisper_config(model_id)
+            .map(|config| config.backend)
+            .unwrap_or(WhisperBackendPreference::Auto);
+
         WhisperModelParams {
-            use_gpu: true,
+            use_gpu: !matches!(backend_preference, WhisperBackendPreference::Cpu),
             // Flash Attention: ~30-50% faster on GPU (Metal/Vulkan).
             // Incompatible with DTW word-level timestamps (we don't use those).
-            flash_attn: true,
+            flash_attn: matches!(backend_preference, WhisperBackendPreference::Gpu)
+                || matches!(backend_preference, WhisperBackendPreference::Auto),
         }
     }
 
-    fn should_apply_text_filter(model_id: Option<&str>) -> bool {
+    fn filter_transcription_output_for_context(
+        text: String,
+        model_id: Option<&str>,
+        app_context: Option<&AppTranscriptionContext>,
+    ) -> String {
+        if matches!(
+            app_context.map(|context| context.category),
+            Some(AppContextCategory::Code)
+        ) {
+            return text;
+        }
+
         match model_id {
-            Some(id) => !is_parakeet_v3_model(id),
-            None => true,
+            Some(id) if is_parakeet_v3_model(id) => text,
+            _ => filter_transcription_output(&text),
         }
     }
 
@@ -102,6 +224,7 @@ impl TranscriptionManager {
             model_manager,
             app_handle: app_handle.clone(),
             current_model_id: Arc::new(Mutex::new(None)),
+            whisper_gpu_active: Arc::new(AtomicBool::new(false)),
             last_activity: Arc::new(AtomicU64::new(
                 SystemTime::now()
                     .duration_since(SystemTime::UNIX_EPOCH)
@@ -209,10 +332,12 @@ impl TranscriptionManager {
             }
             *engine = None; // Drop the engine to free memory
         }
+        self.whisper_gpu_active.store(false, Ordering::Relaxed);
         {
             let mut current_model = self.current_model_id.lock().unwrap();
             *current_model = None;
         }
+        set_active_runtime_model(&self.app_handle, None);
 
         // Emit unloaded event
         let _ = self.app_handle.emit(
@@ -299,35 +424,55 @@ impl TranscriptionManager {
         let loaded_engine = match model_info.engine_type {
             EngineType::Whisper => {
                 let mut engine = WhisperEngine::new();
-                let model_params = Self::whisper_model_params();
+                let model_params = self.whisper_model_params(model_id);
                 let use_gpu = model_params.use_gpu;
-                let gpu_backend = if use_gpu {
+                let preferred_backend = if use_gpu {
                     #[cfg(target_os = "windows")]
                     {
-                        "CPU+OpenMP"
+                        "Vulkan"
                     }
                     #[cfg(target_os = "macos")]
                     {
                         "Metal"
                     }
-                    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+                    #[cfg(target_os = "linux")]
                     {
                         "Vulkan"
+                    }
+                    #[cfg(not(any(
+                        target_os = "windows",
+                        target_os = "macos",
+                        target_os = "linux"
+                    )))]
+                    {
+                        "CPU"
                     }
                 } else {
                     "CPU"
                 };
                 info!(
-                    "Loading Whisper model '{}' — GPU backend: {} (use_gpu={})",
-                    model_id, gpu_backend, model_params.use_gpu
+                    "Loading Whisper model '{}' — preferred backend: {} (use_gpu={})",
+                    model_id, preferred_backend, model_params.use_gpu
                 );
                 let load_result = engine.load_model_with_params(&model_path, model_params);
                 match load_result {
-                    Ok(()) => {}
+                    Ok(()) => {
+                        self.whisper_gpu_active.store(use_gpu, Ordering::Relaxed);
+                        set_active_whisper_backend(
+                            &self.app_handle,
+                            model_id,
+                            if use_gpu {
+                                WhisperBackendPreference::Gpu
+                            } else {
+                                WhisperBackendPreference::Cpu
+                            },
+                            Some(format!("loaded on preferred {} backend", preferred_backend)),
+                        );
+                    }
                     Err(ref e) if use_gpu => {
                         warn!(
-                            "GPU ({}) init failed for '{}': {}. Retrying with CPU fallback.",
-                            gpu_backend, model_id, e
+                            "Preferred Whisper backend ({}) init failed for '{}': {}. Retrying with CPU fallback.",
+                            preferred_backend, model_id, e
                         );
                         let cpu_params = WhisperModelParams {
                             use_gpu: false,
@@ -352,6 +497,20 @@ impl TranscriptionManager {
                         let _ = self
                             .app_handle
                             .emit("whisper-gpu-unavailable", model_id.to_string());
+                        self.whisper_gpu_active.store(false, Ordering::Relaxed);
+                        record_whisper_backend_failure(
+                            &self.app_handle,
+                            model_id,
+                            WhisperBackendPreference::Gpu,
+                            format!("gpu backend init failed: {}", e),
+                            7 * 24 * 60 * 60 * 1000,
+                        );
+                        set_active_whisper_backend(
+                            &self.app_handle,
+                            model_id,
+                            WhisperBackendPreference::Cpu,
+                            Some("gpu backend failed; cpu fallback applied".to_string()),
+                        );
                         warn!(
                             "Whisper '{}' loaded on CPU — transcription will be slow. Consider switching to Parakeet V3.",
                             model_id
@@ -375,9 +534,46 @@ impl TranscriptionManager {
             }
             EngineType::Parakeet => {
                 if is_parakeet_v3_model(model_id) {
-                    let engine = ParakeetTDT::from_pretrained(&model_path, None).map_err(|e| {
-                        let error_msg =
-                            format!("Failed to load Parakeet V3 model {}: {}", model_id, e);
+                    let provider_candidates = parakeet_v3_provider_candidates(&self.app_handle);
+                    let mut last_error = None;
+                    let mut loaded_engine = None;
+
+                    for provider in provider_candidates {
+                        let provider_label = parakeet_provider_label(provider);
+                        info!(
+                            "Attempting to load Parakeet V3 '{}' with provider {}",
+                            model_id, provider_label
+                        );
+
+                        match ParakeetTDT::from_pretrained(
+                            &model_path,
+                            Some(parakeet_v3_execution_config(provider)),
+                        ) {
+                            Ok(engine) => {
+                                info!(
+                                    "Loaded Parakeet V3 '{}' with provider {}",
+                                    model_id, provider_label
+                                );
+                                loaded_engine = Some(engine);
+                                break;
+                            }
+                            Err(err) => {
+                                warn!(
+                                    "Parakeet V3 provider {} failed for '{}': {}",
+                                    provider_label, model_id, err
+                                );
+                                last_error =
+                                    Some(format!("provider {} failed: {}", provider_label, err));
+                            }
+                        }
+                    }
+
+                    let engine = loaded_engine.ok_or_else(|| {
+                        let error_msg = format!(
+                            "Failed to load Parakeet V3 model {}: {}",
+                            model_id,
+                            last_error.unwrap_or_else(|| "no provider succeeded".to_string())
+                        );
                         let _ = self.app_handle.emit(
                             "model-state-changed",
                             ModelStateEvent {
@@ -509,6 +705,7 @@ impl TranscriptionManager {
             let mut current_model = self.current_model_id.lock().unwrap();
             *current_model = Some(model_id.to_string());
         }
+        set_active_runtime_model(&self.app_handle, Some(model_id.to_string()));
 
         // Emit loading completed event
         let _ = self.app_handle.emit(
@@ -563,6 +760,13 @@ impl TranscriptionManager {
     }
 
     pub fn transcribe(&self, audio: Vec<f32>) -> Result<String> {
+        self.transcribe_request(TranscriptionRequest {
+            audio,
+            app_context: None,
+        })
+    }
+
+    pub fn transcribe_request(&self, request: TranscriptionRequest) -> Result<String> {
         // Update last activity timestamp
         self.last_activity.store(
             SystemTime::now()
@@ -573,6 +777,7 @@ impl TranscriptionManager {
         );
 
         let st = std::time::Instant::now();
+        let TranscriptionRequest { audio, app_context } = request;
 
         debug!("Audio vector length: {}", audio.len());
 
@@ -599,6 +804,19 @@ impl TranscriptionManager {
         // Get current settings for configuration
         let settings = get_settings(&self.app_handle);
         let active_model_id = self.get_current_model();
+        let initial_prompt = if settings.adaptive_vocabulary_enabled {
+            if let Some(state) = self.app_handle.try_state::<VocabularyStoreState>() {
+                if let Ok(store) = state.0.lock() {
+                    build_whisper_initial_prompt(&settings, app_context.as_ref(), &store)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // Handle Gemini API separately (requires async HTTP call)
         {
@@ -630,7 +848,11 @@ impl TranscriptionManager {
                 } else {
                     result
                 };
-                let final_result = filter_transcription_output(&corrected);
+                let final_result = Self::filter_transcription_output_for_context(
+                    corrected,
+                    active_model_id.as_deref(),
+                    app_context.as_ref(),
+                );
 
                 let et = std::time::Instant::now();
                 info!(
@@ -680,20 +902,44 @@ impl TranscriptionManager {
                             Some(normalized)
                         };
 
+                        let current_model_id = self.get_current_model();
+                        let whisper_gpu_active =
+                            self.whisper_gpu_active.load(Ordering::Relaxed);
+                        let n_threads = self.recommended_whisper_threads(
+                            current_model_id.as_deref(),
+                            whisper_gpu_active,
+                        );
+
                         let params = WhisperInferenceParams {
                             language: whisper_language,
                             translate: settings.translate_to_english,
+                            initial_prompt: initial_prompt.clone(),
                             greedy_best_of: Some(1),
-                            n_threads: Some(Self::recommended_whisper_threads()),
+                            n_threads: Some(n_threads),
                             debug_mode: false,
+                            // Each dictation chunk is independent. Reusing decoder text
+                            // context across calls can both slow decoding and smear text
+                            // from earlier chunks into later ones.
+                            no_context: true,
                             // Skip timestamp computation — we only need raw text.
                             // This alone saves ~10-20% of inference time.
                             no_timestamps: true,
                             // Treat the full clip as one segment — avoids per-segment
                             // overhead. Safe for push-to-talk dictation clips.
                             single_segment: true,
+                            // Disable whisper.cpp's multi-temperature retry ladder for
+                            // latency-sensitive dictation. Without this, a bad short clip
+                            // can trigger several full re-decodes and explode latency.
+                            temperature: Some(0.0),
+                            temperature_inc: Some(0.0),
+                            entropy_thold: Some(9_999.0),
+                            logprob_thold: Some(-9_999.0),
                             ..Default::default()
                         };
+                        debug!(
+                            "Whisper inference params: model={:?}, gpu_active={}, threads={}",
+                            current_model_id, whisper_gpu_active, n_threads
+                        );
 
                         whisper_engine
                             .transcribe_samples(audio, Some(params))
@@ -825,12 +1071,11 @@ impl TranscriptionManager {
             result
         };
 
-        // Keep Parakeet V3 text as-is to avoid removing valid multilingual output.
-        let filtered_result = if Self::should_apply_text_filter(active_model_id.as_deref()) {
-            filter_transcription_output(&corrected_result)
-        } else {
-            corrected_result
-        };
+        let filtered_result = Self::filter_transcription_output_for_context(
+            corrected_result,
+            active_model_id.as_deref(),
+            app_context.as_ref(),
+        );
 
         let et = std::time::Instant::now();
         let translation_note = if settings.translate_to_english {
@@ -849,7 +1094,14 @@ impl TranscriptionManager {
         if final_result.is_empty() {
             info!("Transcription result is empty");
         } else {
-            info!("Transcription result: {}", final_result);
+            info!(
+                "Transcription result [{}]: {}",
+                app_context
+                    .as_ref()
+                    .map(|context| format!("{:?}", context.category))
+                    .unwrap_or_else(|| "Unknown".to_string()),
+                final_result
+            );
         }
 
         self.maybe_unload_immediately("transcription");

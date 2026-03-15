@@ -4,8 +4,12 @@ pub mod history;
 pub mod models;
 pub mod transcription;
 
+use crate::adaptive_runtime::{
+    get_calibration_states, recalibrate_whisper_model, CalibrationStatusSnapshot,
+};
+use crate::context_detector::{detect_current_app_context, AppTranscriptionContext};
 use crate::runtime_observability::{collect_runtime_diagnostics, RuntimeDiagnostics};
-use crate::settings::{get_settings, write_settings, AppSettings, LogLevel};
+use crate::settings::{get_settings, write_settings, AppSettings, CalibrationPhase, LogLevel};
 use crate::utils::cancel_current_operation;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
@@ -241,5 +245,37 @@ pub fn export_runtime_diagnostics(app: AppHandle, path: String) -> Result<(), St
         .map_err(|e| format!("Failed to serialize runtime diagnostics: {}", e))?;
     std::fs::write(&path, json).map_err(|e| format!("Failed to write diagnostics file: {}", e))?;
     log::info!("Runtime diagnostics exported to {}", path);
+    Ok(())
+}
+
+#[specta::specta]
+#[tauri::command]
+pub fn get_current_app_context() -> Result<AppTranscriptionContext, String> {
+    Ok(detect_current_app_context())
+}
+
+#[specta::specta]
+#[tauri::command]
+pub fn get_adaptive_runtime_profile(
+    app: AppHandle,
+) -> Result<Option<crate::settings::AdaptiveMachineProfile>, String> {
+    Ok(get_settings(&app).adaptive_machine_profile)
+}
+
+#[specta::specta]
+#[tauri::command]
+pub fn get_adaptive_calibration_state() -> Result<Vec<CalibrationStatusSnapshot>, String> {
+    Ok(get_calibration_states())
+}
+
+#[specta::specta]
+#[tauri::command]
+pub fn recalibrate_whisper_model_command(
+    app: AppHandle,
+    model_id: String,
+    phase: Option<CalibrationPhase>,
+) -> Result<(), String> {
+    let model_manager = app.state::<std::sync::Arc<crate::managers::model::ModelManager>>();
+    recalibrate_whisper_model(&app, model_manager.inner().clone(), &model_id, phase);
     Ok(())
 }

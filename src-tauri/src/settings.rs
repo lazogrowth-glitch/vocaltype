@@ -4,6 +4,7 @@ use serde::{Deserialize, Deserializer, Serialize};
 use specta::Type;
 use std::collections::HashMap;
 use std::ops::Deref;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;
 use tauri_plugin_store::StoreExt;
 
@@ -189,6 +190,268 @@ pub enum KeyboardImplementation {
     HandyKeys,
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum WhisperBackendPreference {
+    Auto,
+    Cpu,
+    Gpu,
+}
+
+impl Default for WhisperBackendPreference {
+    fn default() -> Self {
+        WhisperBackendPreference::Auto
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum MachineTier {
+    Low,
+    Medium,
+    High,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum PowerMode {
+    Normal,
+    Saver,
+    Unknown,
+}
+
+impl Default for PowerMode {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum CalibrationPhase {
+    None,
+    Quick,
+    Full,
+}
+
+impl Default for CalibrationPhase {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum BenchPhase {
+    None,
+    QuickDone,
+    FullDone,
+}
+
+impl Default for BenchPhase {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum AdaptiveCalibrationState {
+    Idle,
+    Queued,
+    Running,
+    Completed,
+    Failed,
+    FallbackApplied,
+}
+
+impl Default for AdaptiveCalibrationState {
+    fn default() -> Self {
+        Self::Idle
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Type, Default)]
+pub struct MachineScoreDetails {
+    #[serde(default)]
+    pub ram_score: u8,
+    #[serde(default)]
+    pub cpu_threads_score: u8,
+    #[serde(default)]
+    pub cpu_family_score: u8,
+    #[serde(default)]
+    pub gpu_prebench_bonus: f32,
+    #[serde(default)]
+    pub npu_prebench_bonus: f32,
+    #[serde(default)]
+    pub low_power_penalty: f32,
+    #[serde(default)]
+    pub power_penalty: f32,
+    #[serde(default)]
+    pub thermal_penalty: f32,
+    #[serde(default)]
+    pub final_score: f32,
+    #[serde(default)]
+    pub tier_reason: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum GpuKind {
+    None,
+    Integrated,
+    Dedicated,
+    Unknown,
+}
+
+impl Default for GpuKind {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum NpuKind {
+    None,
+    Qualcomm,
+    Intel,
+    Amd,
+    Unknown,
+}
+
+impl Default for NpuKind {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+pub struct UnsafeBackendRecord {
+    pub backend: WhisperBackendPreference,
+    pub unsafe_until_ms: u64,
+    pub reason: String,
+    pub failed_at_ms: u64,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+pub struct WhisperModelAdaptiveConfig {
+    pub backend: WhisperBackendPreference,
+    pub threads: u8,
+    pub chunk_seconds: u8,
+    pub overlap_ms: u16,
+    #[serde(default)]
+    pub active_backend: WhisperBackendPreference,
+    #[serde(default)]
+    pub active_threads: u8,
+    #[serde(default)]
+    pub active_chunk_seconds: u8,
+    #[serde(default)]
+    pub active_overlap_ms: u16,
+    #[serde(default)]
+    pub short_latency_ms: u64,
+    #[serde(default)]
+    pub medium_latency_ms: u64,
+    #[serde(default)]
+    pub long_latency_ms: u64,
+    #[serde(default)]
+    pub stability_score: f32,
+    #[serde(default)]
+    pub overall_score: f32,
+    #[serde(default)]
+    pub failure_count: u32,
+    #[serde(default)]
+    pub calibrated_phase: CalibrationPhase,
+    #[serde(default)]
+    pub unsafe_backends: Vec<UnsafeBackendRecord>,
+    #[serde(default)]
+    pub unsafe_until: Option<u64>,
+    #[serde(default)]
+    pub last_failure_reason: Option<String>,
+    #[serde(default)]
+    pub last_failure_at: Option<u64>,
+    #[serde(default)]
+    pub last_quick_bench_at: Option<u64>,
+    #[serde(default)]
+    pub last_full_bench_at: Option<u64>,
+    #[serde(default)]
+    pub backend_decision_reason: Option<String>,
+    #[serde(default)]
+    pub config_decision_reason: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+pub struct WhisperAdaptiveProfile {
+    pub small: WhisperModelAdaptiveConfig,
+    pub medium: WhisperModelAdaptiveConfig,
+    pub turbo: WhisperModelAdaptiveConfig,
+    pub large: WhisperModelAdaptiveConfig,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+pub struct AdaptiveMachineProfile {
+    #[serde(default)]
+    pub profile_schema_version: u16,
+    #[serde(default)]
+    pub app_version: String,
+    #[serde(default)]
+    pub backend_version: String,
+    #[serde(default)]
+    pub machine_score_details: MachineScoreDetails,
+    pub machine_tier: MachineTier,
+    pub cpu_brand: String,
+    pub logical_cores: u8,
+    pub total_memory_gb: u16,
+    pub low_power_cpu: bool,
+    #[serde(default)]
+    pub gpu_detected: bool,
+    #[serde(default)]
+    pub gpu_kind: GpuKind,
+    #[serde(default)]
+    pub gpu_name: Option<String>,
+    #[serde(default)]
+    pub npu_detected: bool,
+    #[serde(default)]
+    pub npu_kind: NpuKind,
+    #[serde(default)]
+    pub npu_name: Option<String>,
+    #[serde(default)]
+    pub copilot_plus_detected: bool,
+    #[serde(default)]
+    pub on_battery: Option<bool>,
+    #[serde(default)]
+    pub power_mode: PowerMode,
+    #[serde(default)]
+    pub thermal_degraded: bool,
+    #[serde(default)]
+    pub runtime_power_snapshot_at: Option<u64>,
+    pub recommended_model_id: String,
+    pub secondary_model_id: Option<String>,
+    #[serde(default)]
+    pub active_runtime_model_id: Option<String>,
+    #[serde(default)]
+    pub recommended_backend: Option<WhisperBackendPreference>,
+    #[serde(default)]
+    pub active_backend: Option<WhisperBackendPreference>,
+    #[serde(default)]
+    pub calibrated_models: Vec<String>,
+    #[serde(default)]
+    pub bench_phase: BenchPhase,
+    #[serde(default)]
+    pub bench_completed_at: Option<u64>,
+    #[serde(default)]
+    pub last_quick_bench_at: Option<u64>,
+    #[serde(default)]
+    pub last_full_bench_at: Option<u64>,
+    #[serde(default)]
+    pub calibration_state: AdaptiveCalibrationState,
+    #[serde(default)]
+    pub calibration_reason: Option<String>,
+    #[serde(default)]
+    pub large_skip_reason: Option<String>,
+    pub whisper: WhisperAdaptiveProfile,
+}
+
 impl Default for KeyboardImplementation {
     fn default() -> Self {
         // Default to HandyKeys only on macOS where it's well-tested.
@@ -334,6 +597,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub custom_words: Vec<String>,
     #[serde(default)]
+    pub adaptive_vocabulary_enabled: bool,
+    #[serde(default)]
     pub model_unload_timeout: ModelUnloadTimeout,
     #[serde(default = "default_word_correction_threshold")]
     pub word_correction_threshold: f64,
@@ -392,10 +657,18 @@ pub struct AppSettings {
     pub post_process_actions: Vec<PostProcessAction>,
     #[serde(default)]
     pub saved_processing_models: Vec<SavedProcessingModel>,
+    #[serde(default = "default_adaptive_profile_applied")]
+    pub adaptive_profile_applied: bool,
+    #[serde(default)]
+    pub adaptive_machine_profile: Option<AdaptiveMachineProfile>,
 }
 
 fn default_model() -> String {
     "".to_string()
+}
+
+fn default_adaptive_profile_applied() -> bool {
+    false
 }
 
 fn default_always_on_microphone() -> bool {
@@ -483,6 +756,896 @@ fn preferred_transcription_language_from_locale(locale: &str) -> String {
         | "vi" | "ar" | "cs" => base_language.to_string(),
         _ => "auto".to_string(),
     }
+}
+
+fn preferred_model_for_locale(locale: &str) -> String {
+    let base_language = locale.split('-').next().unwrap_or("en");
+    if base_language == "en" {
+        "parakeet-tdt-0.6b-v3-english".to_string()
+    } else {
+        "parakeet-tdt-0.6b-v3-multilingual".to_string()
+    }
+}
+
+fn secondary_model_for_locale(locale: &str, tier: MachineTier) -> Option<String> {
+    let base_language = locale.split('-').next().unwrap_or("en");
+    if base_language == "en" {
+        return Some("turbo".to_string());
+    }
+
+    match tier {
+        MachineTier::High => Some("large".to_string()),
+        MachineTier::Medium => Some("turbo".to_string()),
+        MachineTier::Low => Some("small".to_string()),
+    }
+}
+
+const ADAPTIVE_PROFILE_SCHEMA_VERSION: u16 = 4;
+const THERMAL_DEGRADED_CELSIUS: f32 = 75.0;
+const TURBO_POLICY_COOLDOWN_MS: u64 = 24 * 60 * 60 * 1000;
+const ADAPTIVE_PROFILE_BENCH_STALE_MS: u64 = 30 * 24 * 60 * 60 * 1000;
+const BACKEND_VERSION: &str = "whisper-adaptive-v2";
+
+pub fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimePowerSnapshot {
+    on_battery: Option<bool>,
+    power_mode: PowerMode,
+    thermal_degraded: bool,
+    captured_at_ms: u64,
+}
+
+#[derive(Debug, Clone)]
+struct GpuSnapshot {
+    detected: bool,
+    kind: GpuKind,
+    name: Option<String>,
+}
+
+impl Default for GpuSnapshot {
+    fn default() -> Self {
+        Self {
+            detected: false,
+            kind: GpuKind::Unknown,
+            name: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct NpuSnapshot {
+    detected: bool,
+    kind: NpuKind,
+    name: Option<String>,
+    copilot_plus: bool,
+}
+
+impl Default for NpuSnapshot {
+    fn default() -> Self {
+        Self {
+            detected: false,
+            kind: NpuKind::None,
+            name: None,
+            copilot_plus: false,
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct Win32VideoController {
+    name: Option<String>,
+    adapter_compatibility: Option<String>,
+    pnp_device_id: Option<String>,
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct Win32PnPEntity {
+    name: Option<String>,
+    manufacturer: Option<String>,
+    pnp_class: Option<String>,
+    device_id: Option<String>,
+}
+
+#[cfg(target_os = "windows")]
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct ThermalZoneInfo {
+    current_temperature: Option<u32>,
+    critical_trip_point: Option<u32>,
+    passive_trip_point: Option<u32>,
+}
+
+fn gpu_kind_rank(kind: GpuKind) -> u8 {
+    match kind {
+        GpuKind::None => 0,
+        GpuKind::Unknown => 1,
+        GpuKind::Integrated => 2,
+        GpuKind::Dedicated => 3,
+    }
+}
+
+fn gpu_kind_label(kind: GpuKind) -> &'static str {
+    match kind {
+        GpuKind::None => "none",
+        GpuKind::Integrated => "integrated",
+        GpuKind::Dedicated => "dedicated",
+        GpuKind::Unknown => "unknown",
+    }
+}
+
+fn npu_kind_rank(kind: NpuKind) -> u8 {
+    match kind {
+        NpuKind::None => 0,
+        NpuKind::Unknown => 1,
+        NpuKind::Intel | NpuKind::Amd | NpuKind::Qualcomm => 2,
+    }
+}
+
+fn npu_kind_label(kind: NpuKind) -> &'static str {
+    match kind {
+        NpuKind::None => "none",
+        NpuKind::Qualcomm => "qualcomm",
+        NpuKind::Intel => "intel",
+        NpuKind::Amd => "amd",
+        NpuKind::Unknown => "unknown",
+    }
+}
+
+fn is_probable_copilot_plus_cpu(cpu_brand_upper: &str, npu_kind: NpuKind) -> bool {
+    match npu_kind {
+        NpuKind::Qualcomm => cpu_brand_upper.contains("SNAPDRAGON X"),
+        NpuKind::Intel => {
+            cpu_brand_upper.contains("CORE ULTRA")
+                && ["226V", "228V", "236V", "238V", "258V", "268V", "288V"]
+                    .iter()
+                    .any(|needle| cpu_brand_upper.contains(needle))
+        }
+        NpuKind::Amd => cpu_brand_upper.contains("RYZEN AI"),
+        NpuKind::None | NpuKind::Unknown => false,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn classify_windows_gpu(controller: &Win32VideoController) -> GpuKind {
+    let text = format!(
+        "{} {} {}",
+        controller.name.as_deref().unwrap_or_default(),
+        controller
+            .adapter_compatibility
+            .as_deref()
+            .unwrap_or_default(),
+        controller.pnp_device_id.as_deref().unwrap_or_default()
+    )
+    .to_uppercase();
+
+    if text.trim().is_empty() || text.contains("MICROSOFT BASIC") {
+        return GpuKind::Unknown;
+    }
+
+    let dedicated_markers = [
+        "NVIDIA",
+        "GEFORCE",
+        "RTX",
+        "GTX",
+        "QUADRO",
+        "TESLA",
+        "TITAN",
+        "RADEON RX",
+        "RADEON PRO",
+        " AMD RX",
+        " AMD PRO",
+        "INTEL ARC",
+    ];
+    if dedicated_markers.iter().any(|needle| text.contains(needle)) {
+        return GpuKind::Dedicated;
+    }
+
+    let integrated_markers = [
+        "INTEL",
+        "UHD",
+        "IRIS",
+        "HD GRAPHICS",
+        "RADEON GRAPHICS",
+        "VEGA 8",
+        "VEGA 7",
+        "680M",
+        "780M",
+    ];
+    if integrated_markers
+        .iter()
+        .any(|needle| text.contains(needle))
+    {
+        return GpuKind::Integrated;
+    }
+
+    GpuKind::Unknown
+}
+
+#[cfg(target_os = "windows")]
+fn classify_windows_npu(entity: &Win32PnPEntity) -> Option<NpuKind> {
+    let text = format!(
+        "{} {} {} {}",
+        entity.name.as_deref().unwrap_or_default(),
+        entity.manufacturer.as_deref().unwrap_or_default(),
+        entity.pnp_class.as_deref().unwrap_or_default(),
+        entity.device_id.as_deref().unwrap_or_default()
+    )
+    .to_uppercase();
+
+    let has_npu_markers = [
+        "NPU",
+        "AI BOOST",
+        "HEXAGON",
+        "RYZEN AI",
+        "AMD IPU",
+        "IPU DEVICE",
+        "NEURAL PROCESSING",
+    ]
+    .iter()
+    .any(|needle| text.contains(needle));
+
+    if !has_npu_markers {
+        return None;
+    }
+
+    if text.contains("QUALCOMM") || text.contains("HEXAGON") {
+        return Some(NpuKind::Qualcomm);
+    }
+
+    if text.contains("INTEL") || text.contains("AI BOOST") {
+        return Some(NpuKind::Intel);
+    }
+
+    if text.contains("AMD") || text.contains("RYZEN AI") || text.contains("AMD IPU") {
+        return Some(NpuKind::Amd);
+    }
+
+    Some(NpuKind::Unknown)
+}
+
+#[cfg(target_os = "windows")]
+fn open_wmi_com_library() -> Option<wmi::COMLibrary> {
+    use wmi::COMLibrary;
+
+    match COMLibrary::without_security() {
+        Ok(value) => Some(value),
+        Err(err) => {
+            debug!(
+                "Falling back to assumed COM initialization for WMI access: {}",
+                err
+            );
+            Some(unsafe { COMLibrary::assume_initialized() })
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn detect_gpu_snapshot() -> GpuSnapshot {
+    use wmi::WMIConnection;
+
+    let Some(com) = open_wmi_com_library() else {
+        return GpuSnapshot {
+            detected: true,
+            kind: GpuKind::Unknown,
+            name: None,
+        };
+    };
+
+    let connection = match WMIConnection::new(com.into()) {
+        Ok(value) => value,
+        Err(err) => {
+            warn!("Failed to connect to WMI for GPU detection: {}", err);
+            return GpuSnapshot {
+                detected: true,
+                kind: GpuKind::Unknown,
+                name: None,
+            };
+        }
+    };
+
+    let controllers: Vec<Win32VideoController> = match connection
+        .raw_query("SELECT Name, AdapterCompatibility, PNPDeviceID FROM Win32_VideoController")
+    {
+        Ok(value) => value,
+        Err(err) => {
+            warn!("Failed to query Win32_VideoController: {}", err);
+            return GpuSnapshot {
+                detected: true,
+                kind: GpuKind::Unknown,
+                name: None,
+            };
+        }
+    };
+
+    let mut best_kind = GpuKind::None;
+    let mut best_name = None;
+    for controller in controllers {
+        let kind = classify_windows_gpu(&controller);
+        if matches!(kind, GpuKind::Unknown | GpuKind::None) {
+            continue;
+        }
+        if gpu_kind_rank(kind) > gpu_kind_rank(best_kind) {
+            best_name = controller.name.clone();
+            best_kind = kind;
+        }
+    }
+
+    if matches!(best_kind, GpuKind::None) {
+        GpuSnapshot {
+            detected: false,
+            kind: GpuKind::None,
+            name: None,
+        }
+    } else {
+        GpuSnapshot {
+            detected: true,
+            kind: best_kind,
+            name: best_name,
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn detect_npu_snapshot(cpu_brand_upper: &str) -> NpuSnapshot {
+    use wmi::WMIConnection;
+
+    let Some(com) = open_wmi_com_library() else {
+        return NpuSnapshot::default();
+    };
+
+    let connection = match WMIConnection::new(com.into()) {
+        Ok(value) => value,
+        Err(err) => {
+            warn!("Failed to connect to WMI for NPU detection: {}", err);
+            return NpuSnapshot::default();
+        }
+    };
+
+    let entities: Vec<Win32PnPEntity> = match connection
+        .raw_query("SELECT Name, Manufacturer, PNPClass, DeviceID FROM Win32_PnPEntity")
+    {
+        Ok(value) => value,
+        Err(err) => {
+            warn!("Failed to query Win32_PnPEntity for NPU detection: {}", err);
+            return NpuSnapshot::default();
+        }
+    };
+
+    let mut best_kind = NpuKind::None;
+    let mut best_name = None;
+    for entity in entities {
+        let Some(kind) = classify_windows_npu(&entity) else {
+            continue;
+        };
+        if npu_kind_rank(kind) > npu_kind_rank(best_kind) {
+            best_kind = kind;
+            best_name = entity.name.clone();
+        }
+    }
+
+    if matches!(best_kind, NpuKind::None) {
+        return NpuSnapshot::default();
+    }
+
+    NpuSnapshot {
+        detected: true,
+        kind: best_kind,
+        name: best_name,
+        copilot_plus: is_probable_copilot_plus_cpu(cpu_brand_upper, best_kind),
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_npu_snapshot(_cpu_brand_upper: &str) -> NpuSnapshot {
+    NpuSnapshot::default()
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_gpu_snapshot() -> GpuSnapshot {
+    GpuSnapshot {
+        detected: cfg!(any(target_os = "macos", target_os = "linux")),
+        kind: GpuKind::Unknown,
+        name: None,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn detect_thermal_degraded() -> bool {
+    use wmi::WMIConnection;
+
+    let Some(com) = open_wmi_com_library() else {
+        return false;
+    };
+
+    let connection = match WMIConnection::with_namespace_path("ROOT\\WMI", com.into()) {
+        Ok(value) => value,
+        Err(err) => {
+            warn!("Failed to connect to WMI thermal namespace: {}", err);
+            return false;
+        }
+    };
+
+    let zones: Vec<ThermalZoneInfo> = match connection.raw_query(
+        "SELECT CurrentTemperature, CriticalTripPoint, PassiveTripPoint FROM MSAcpi_ThermalZoneTemperature",
+    ) {
+        Ok(value) => value,
+        Err(err) => {
+            debug!("Thermal WMI query unavailable: {}", err);
+            return false;
+        }
+    };
+
+    zones.into_iter().any(|zone| {
+        let current_celsius = zone
+            .current_temperature
+            .map(|value| (value as f32 / 10.0) - 273.15)
+            .filter(|value| value.is_finite() && *value > 0.0);
+        let passive_celsius = zone
+            .passive_trip_point
+            .map(|value| (value as f32 / 10.0) - 273.15)
+            .filter(|value| value.is_finite() && *value > 0.0);
+        let critical_celsius = zone
+            .critical_trip_point
+            .map(|value| (value as f32 / 10.0) - 273.15)
+            .filter(|value| value.is_finite() && *value > 0.0);
+
+        let Some(current_celsius) = current_celsius else {
+            return false;
+        };
+
+        current_celsius >= THERMAL_DEGRADED_CELSIUS
+            || passive_celsius
+                .map(|passive| current_celsius >= passive - 2.0)
+                .unwrap_or(false)
+            || critical_celsius
+                .map(|critical| current_celsius >= critical - 10.0)
+                .unwrap_or(false)
+    })
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_thermal_degraded() -> bool {
+    false
+}
+
+#[cfg(target_os = "windows")]
+fn detect_runtime_power_snapshot() -> RuntimePowerSnapshot {
+    use windows::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+
+    let mut status = SYSTEM_POWER_STATUS::default();
+    let captured_at_ms = now_ms();
+    let result = unsafe { GetSystemPowerStatus(&mut status) };
+    if result.is_ok() {
+        let on_battery = match status.ACLineStatus {
+            0 => Some(true),
+            1 => Some(false),
+            _ => None,
+        };
+        let power_mode = if status.SystemStatusFlag == 1 {
+            PowerMode::Saver
+        } else {
+            PowerMode::Normal
+        };
+        RuntimePowerSnapshot {
+            on_battery,
+            power_mode,
+            thermal_degraded: detect_thermal_degraded(),
+            captured_at_ms,
+        }
+    } else {
+        RuntimePowerSnapshot {
+            on_battery: None,
+            power_mode: PowerMode::Unknown,
+            thermal_degraded: detect_thermal_degraded(),
+            captured_at_ms,
+        }
+    }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn detect_runtime_power_snapshot() -> RuntimePowerSnapshot {
+    RuntimePowerSnapshot {
+        on_battery: None,
+        power_mode: PowerMode::Unknown,
+        thermal_degraded: false,
+        captured_at_ms: now_ms(),
+    }
+}
+
+fn ram_score(total_memory_gb: u16) -> u8 {
+    match total_memory_gb {
+        0..=8 => 0,
+        9..=15 => 1,
+        16..=23 => 2,
+        _ => 3,
+    }
+}
+
+fn cpu_threads_score(logical_cores: u8) -> u8 {
+    match logical_cores {
+        0..=8 => 0,
+        9..=12 => 1,
+        13..=16 => 2,
+        _ => 3,
+    }
+}
+
+fn cpu_family_score(cpu_brand_upper: &str, low_power_cpu: bool) -> u8 {
+    if low_power_cpu
+        || ["CELERON", "PENTIUM", "N100", "N200", "ATHLON", "SILVER"]
+            .iter()
+            .any(|needle| cpu_brand_upper.contains(needle))
+    {
+        0
+    } else if ["HX", "HS", "H ", "DESKTOP", "RYZEN 9", "CORE I9", "XEON"]
+        .iter()
+        .any(|needle| cpu_brand_upper.contains(needle))
+    {
+        2
+    } else {
+        1
+    }
+}
+
+fn whisper_config(
+    backend: WhisperBackendPreference,
+    threads: u8,
+    chunk_seconds: u8,
+    overlap_ms: u16,
+) -> WhisperModelAdaptiveConfig {
+    WhisperModelAdaptiveConfig {
+        backend,
+        threads,
+        chunk_seconds,
+        overlap_ms,
+        active_backend: backend,
+        active_threads: threads,
+        active_chunk_seconds: chunk_seconds,
+        active_overlap_ms: overlap_ms,
+        short_latency_ms: 0,
+        medium_latency_ms: 0,
+        long_latency_ms: 0,
+        stability_score: 1.0,
+        overall_score: 0.0,
+        failure_count: 0,
+        calibrated_phase: CalibrationPhase::None,
+        unsafe_backends: Vec::new(),
+        unsafe_until: None,
+        last_failure_reason: None,
+        last_failure_at: None,
+        last_quick_bench_at: None,
+        last_full_bench_at: None,
+        backend_decision_reason: None,
+        config_decision_reason: None,
+    }
+}
+
+fn current_app_version(app: &AppHandle) -> String {
+    app.package_info().version.to_string()
+}
+
+fn tier_from_score(score: f32) -> MachineTier {
+    if score <= 2.0 {
+        MachineTier::Low
+    } else if score <= 5.0 {
+        MachineTier::Medium
+    } else {
+        MachineTier::High
+    }
+}
+
+fn detect_adaptive_machine_profile(app: &AppHandle, app_language: &str) -> AdaptiveMachineProfile {
+    let mut system = sysinfo::System::new_all();
+    system.refresh_cpu_all();
+    system.refresh_memory();
+
+    let power_snapshot = detect_runtime_power_snapshot();
+    let gpu_snapshot = detect_gpu_snapshot();
+    let cpu_brand = system
+        .cpus()
+        .first()
+        .map(|cpu| cpu.brand().trim().to_string())
+        .filter(|brand| !brand.is_empty())
+        .unwrap_or_else(|| "Unknown CPU".to_string());
+    let logical_cores = std::thread::available_parallelism()
+        .map(|value| value.get())
+        .unwrap_or(4)
+        .min(u8::MAX as usize) as u8;
+    let total_memory_gb = (system.total_memory() / 1024 / 1024 / 1024)
+        .max(1)
+        .min(u16::MAX as u64) as u16;
+
+    let cpu_brand_upper = cpu_brand.to_uppercase();
+    let low_power_cpu = [
+        " CELERON", " PENTIUM", " N100", " N200", " N305", " U", " Y",
+    ]
+    .iter()
+    .any(|needle| cpu_brand_upper.contains(needle));
+    let gpu_detected = gpu_snapshot.detected;
+    let npu_snapshot = detect_npu_snapshot(&cpu_brand_upper);
+    let machine_score_details = {
+        let ram_score = ram_score(total_memory_gb);
+        let cpu_threads_score = cpu_threads_score(logical_cores);
+        let cpu_family_score = cpu_family_score(&cpu_brand_upper, low_power_cpu);
+        let gpu_prebench_bonus = match gpu_snapshot.kind {
+            GpuKind::Dedicated => 0.10,
+            GpuKind::Integrated => 0.05,
+            _ => 0.0,
+        };
+        let npu_prebench_bonus = if npu_snapshot.copilot_plus {
+            0.10
+        } else if npu_snapshot.detected {
+            0.05
+        } else {
+            0.0
+        };
+        let low_power_penalty = if low_power_cpu { -1.0 } else { 0.0 };
+        let power_penalty = if power_snapshot.on_battery == Some(true) {
+            -0.5
+        } else if matches!(power_snapshot.power_mode, PowerMode::Saver) {
+            -0.5
+        } else {
+            0.0
+        };
+        let thermal_penalty = if power_snapshot.thermal_degraded {
+            -1.0
+        } else {
+            0.0
+        };
+        let final_score = ram_score as f32
+            + cpu_threads_score as f32
+            + cpu_family_score as f32
+            + gpu_prebench_bonus
+            + npu_prebench_bonus
+            + low_power_penalty
+            + power_penalty
+            + thermal_penalty;
+        MachineScoreDetails {
+            ram_score,
+            cpu_threads_score,
+            cpu_family_score,
+            gpu_prebench_bonus,
+            npu_prebench_bonus,
+            low_power_penalty,
+            power_penalty,
+            thermal_penalty,
+            final_score,
+            tier_reason: format!(
+                "ram={} cpu_threads={} cpu_family={} gpu_kind={} gpu_bonus={:.2} npu_kind={} npu_bonus={:.2} copilot_plus={} low_power={:.2} power={:.2} thermal={:.2}",
+                ram_score,
+                cpu_threads_score,
+                cpu_family_score,
+                gpu_kind_label(gpu_snapshot.kind),
+                gpu_prebench_bonus,
+                npu_kind_label(npu_snapshot.kind),
+                npu_prebench_bonus,
+                npu_snapshot.copilot_plus,
+                low_power_penalty,
+                power_penalty,
+                thermal_penalty
+            ),
+        }
+    };
+    let machine_tier = tier_from_score(machine_score_details.final_score);
+
+    let whisper = match machine_tier {
+        MachineTier::Low => WhisperAdaptiveProfile {
+            small: whisper_config(
+                if low_power_cpu && total_memory_gb <= 8 {
+                    WhisperBackendPreference::Cpu
+                } else {
+                    WhisperBackendPreference::Auto
+                },
+                6,
+                12,
+                500,
+            ),
+            medium: whisper_config(WhisperBackendPreference::Auto, 6, 10, 500),
+            turbo: whisper_config(WhisperBackendPreference::Auto, 6, 12, 500),
+            large: whisper_config(WhisperBackendPreference::Gpu, 4, 12, 750),
+        },
+        MachineTier::Medium => WhisperAdaptiveProfile {
+            small: whisper_config(WhisperBackendPreference::Auto, 8, 10, 500),
+            medium: whisper_config(WhisperBackendPreference::Auto, 6, 8, 500),
+            turbo: whisper_config(WhisperBackendPreference::Auto, 8, 10, 500),
+            large: whisper_config(WhisperBackendPreference::Gpu, 4, 10, 750),
+        },
+        MachineTier::High => WhisperAdaptiveProfile {
+            small: whisper_config(WhisperBackendPreference::Auto, 8, 8, 500),
+            medium: whisper_config(WhisperBackendPreference::Auto, 8, 8, 500),
+            turbo: whisper_config(WhisperBackendPreference::Gpu, 8, 8, 500),
+            large: whisper_config(WhisperBackendPreference::Gpu, 6, 10, 750),
+        },
+    };
+
+    AdaptiveMachineProfile {
+        profile_schema_version: ADAPTIVE_PROFILE_SCHEMA_VERSION,
+        app_version: current_app_version(app),
+        backend_version: BACKEND_VERSION.to_string(),
+        machine_score_details,
+        machine_tier,
+        cpu_brand,
+        logical_cores,
+        total_memory_gb,
+        low_power_cpu,
+        gpu_detected,
+        gpu_kind: gpu_snapshot.kind,
+        gpu_name: gpu_snapshot.name,
+        npu_detected: npu_snapshot.detected,
+        npu_kind: npu_snapshot.kind,
+        npu_name: npu_snapshot.name,
+        copilot_plus_detected: npu_snapshot.copilot_plus,
+        on_battery: power_snapshot.on_battery,
+        power_mode: power_snapshot.power_mode,
+        thermal_degraded: power_snapshot.thermal_degraded,
+        runtime_power_snapshot_at: Some(power_snapshot.captured_at_ms),
+        recommended_model_id: preferred_model_for_locale(app_language),
+        secondary_model_id: secondary_model_for_locale(app_language, machine_tier),
+        active_runtime_model_id: None,
+        recommended_backend: None,
+        active_backend: None,
+        calibrated_models: Vec::new(),
+        bench_phase: BenchPhase::None,
+        bench_completed_at: None,
+        last_quick_bench_at: None,
+        last_full_bench_at: None,
+        calibration_state: AdaptiveCalibrationState::Idle,
+        calibration_reason: None,
+        large_skip_reason: None,
+        whisper,
+    }
+}
+
+fn profile_is_stale(profile: &AdaptiveMachineProfile, app: &AppHandle) -> bool {
+    if profile.profile_schema_version < ADAPTIVE_PROFILE_SCHEMA_VERSION {
+        return true;
+    }
+
+    if profile.app_version != current_app_version(app) || profile.backend_version != BACKEND_VERSION
+    {
+        return true;
+    }
+
+    profile
+        .bench_completed_at
+        .map(|timestamp| now_ms().saturating_sub(timestamp) > ADAPTIVE_PROFILE_BENCH_STALE_MS)
+        .unwrap_or(false)
+}
+
+fn merge_whisper_profile(
+    mut base: AdaptiveMachineProfile,
+    existing: AdaptiveMachineProfile,
+) -> AdaptiveMachineProfile {
+    base.whisper = existing.whisper;
+    base.calibrated_models = existing.calibrated_models;
+    base.bench_phase = existing.bench_phase;
+    base.bench_completed_at = existing.bench_completed_at;
+    base.last_quick_bench_at = existing.last_quick_bench_at;
+    base.last_full_bench_at = existing.last_full_bench_at;
+    base.calibration_state = existing.calibration_state;
+    base.calibration_reason = existing.calibration_reason;
+    base.large_skip_reason = existing.large_skip_reason;
+    base.active_runtime_model_id = existing.active_runtime_model_id;
+    base.recommended_backend = existing.recommended_backend;
+    base.active_backend = existing.active_backend;
+    base
+}
+
+fn normalize_adaptive_profile(profile: &mut AdaptiveMachineProfile) {
+    let turbo = &mut profile.whisper.turbo;
+    for entry in &mut turbo.unsafe_backends {
+        let capped_until = entry.failed_at_ms.saturating_add(TURBO_POLICY_COOLDOWN_MS);
+        if entry.unsafe_until_ms > capped_until {
+            entry.unsafe_until_ms = capped_until;
+        }
+    }
+    turbo.unsafe_until = turbo
+        .unsafe_backends
+        .iter()
+        .map(|entry| entry.unsafe_until_ms)
+        .max();
+}
+
+fn profile_needs_turbo_cooldown_normalization(profile: &AdaptiveMachineProfile) -> bool {
+    profile.whisper.turbo.unsafe_backends.iter().any(|entry| {
+        entry.unsafe_until_ms > entry.failed_at_ms.saturating_add(TURBO_POLICY_COOLDOWN_MS)
+    })
+}
+
+fn ensure_adaptive_profile(app: &AppHandle, settings: &mut AppSettings) -> bool {
+    let mut changed = false;
+    let needs_new_profile = !settings.adaptive_profile_applied
+        || settings.adaptive_machine_profile.is_none()
+        || settings
+            .adaptive_machine_profile
+            .as_ref()
+            .map(|profile| profile_is_stale(profile, app))
+            .unwrap_or(true);
+
+    let mut detected = detect_adaptive_machine_profile(app, &settings.app_language);
+    if let Some(existing) = settings.adaptive_machine_profile.clone() {
+        detected = merge_whisper_profile(detected, existing);
+    }
+    normalize_adaptive_profile(&mut detected);
+
+    if needs_new_profile {
+        settings.adaptive_machine_profile = Some(detected);
+        settings.adaptive_profile_applied = true;
+        changed = true;
+    } else if let Some(existing) = settings.adaptive_machine_profile.as_mut() {
+        let current_selected_model = settings.selected_model.clone();
+        let new_recommended = preferred_model_for_locale(&settings.app_language);
+        let new_secondary =
+            secondary_model_for_locale(&settings.app_language, detected.machine_tier);
+        let has_diff = existing.profile_schema_version != ADAPTIVE_PROFILE_SCHEMA_VERSION
+            || existing.app_version != current_app_version(app)
+            || existing.backend_version != BACKEND_VERSION
+            || existing.machine_score_details.final_score
+                != detected.machine_score_details.final_score
+            || existing.machine_tier != detected.machine_tier
+            || existing.cpu_brand != detected.cpu_brand
+            || existing.logical_cores != detected.logical_cores
+            || existing.total_memory_gb != detected.total_memory_gb
+            || existing.low_power_cpu != detected.low_power_cpu
+            || existing.gpu_detected != detected.gpu_detected
+            || existing.gpu_kind != detected.gpu_kind
+            || existing.gpu_name != detected.gpu_name
+            || existing.npu_detected != detected.npu_detected
+            || existing.npu_kind != detected.npu_kind
+            || existing.npu_name != detected.npu_name
+            || existing.copilot_plus_detected != detected.copilot_plus_detected
+            || existing.on_battery != detected.on_battery
+            || existing.power_mode != detected.power_mode
+            || existing.thermal_degraded != detected.thermal_degraded
+            || existing.recommended_model_id != new_recommended
+            || existing.secondary_model_id != new_secondary
+            || profile_needs_turbo_cooldown_normalization(existing)
+            || (!current_selected_model.is_empty()
+                && existing.active_runtime_model_id.as_deref()
+                    != Some(current_selected_model.as_str()));
+
+        if has_diff {
+            existing.profile_schema_version = ADAPTIVE_PROFILE_SCHEMA_VERSION;
+            existing.app_version = current_app_version(app);
+            existing.backend_version = BACKEND_VERSION.to_string();
+            existing.machine_score_details = detected.machine_score_details;
+            existing.machine_tier = detected.machine_tier;
+            existing.cpu_brand = detected.cpu_brand;
+            existing.logical_cores = detected.logical_cores;
+            existing.total_memory_gb = detected.total_memory_gb;
+            existing.low_power_cpu = detected.low_power_cpu;
+            existing.gpu_detected = detected.gpu_detected;
+            existing.gpu_kind = detected.gpu_kind;
+            existing.gpu_name = detected.gpu_name;
+            existing.npu_detected = detected.npu_detected;
+            existing.npu_kind = detected.npu_kind;
+            existing.npu_name = detected.npu_name;
+            existing.copilot_plus_detected = detected.copilot_plus_detected;
+            existing.on_battery = detected.on_battery;
+            existing.power_mode = detected.power_mode;
+            existing.thermal_degraded = detected.thermal_degraded;
+            existing.runtime_power_snapshot_at = detected.runtime_power_snapshot_at;
+            existing.recommended_model_id = new_recommended;
+            existing.secondary_model_id = new_secondary;
+            if !current_selected_model.is_empty() {
+                existing.active_runtime_model_id = Some(current_selected_model);
+            }
+            normalize_adaptive_profile(existing);
+            changed = true;
+        }
+    }
+
+    changed
 }
 
 fn default_show_tray_icon() -> bool {
@@ -803,6 +1966,7 @@ pub fn get_default_settings() -> AppSettings {
         debug_mode: false,
         log_level: default_log_level(),
         custom_words: Vec::new(),
+        adaptive_vocabulary_enabled: false,
         model_unload_timeout: ModelUnloadTimeout::Never,
         word_correction_threshold: default_word_correction_threshold(),
         history_limit: default_history_limit(),
@@ -833,6 +1997,8 @@ pub fn get_default_settings() -> AppSettings {
         gemini_model: default_gemini_model(),
         post_process_actions: Vec::new(),
         saved_processing_models: Vec::new(),
+        adaptive_profile_applied: default_adaptive_profile_applied(),
+        adaptive_machine_profile: None,
     }
 }
 
@@ -856,6 +2022,53 @@ impl AppSettings {
         self.post_process_providers
             .iter_mut()
             .find(|provider| provider.id == provider_id)
+    }
+
+    pub fn adaptive_whisper_config(&self, model_id: &str) -> Option<WhisperModelAdaptiveConfig> {
+        let profile = self.adaptive_machine_profile.as_ref()?;
+        let mut config = match model_id {
+            "small" => profile.whisper.small.clone(),
+            "medium" => profile.whisper.medium.clone(),
+            "turbo" => profile.whisper.turbo.clone(),
+            "large" => profile.whisper.large.clone(),
+            _ => return None,
+        };
+
+        config.backend = if !matches!(config.active_backend, WhisperBackendPreference::Auto)
+            || matches!(config.backend, WhisperBackendPreference::Auto)
+        {
+            config.active_backend
+        } else {
+            config.backend
+        };
+        if config.active_threads > 0 {
+            config.threads = config.active_threads;
+        }
+        if config.active_chunk_seconds > 0 {
+            config.chunk_seconds = config.active_chunk_seconds;
+        }
+        if config.active_overlap_ms > 0 {
+            config.overlap_ms = config.active_overlap_ms;
+        }
+
+        let constrained = profile.on_battery == Some(true)
+            || matches!(profile.power_mode, PowerMode::Saver)
+            || profile.thermal_degraded;
+        if constrained {
+            match model_id {
+                "turbo" => {
+                    config.threads = config.threads.min(6);
+                    config.chunk_seconds = config.chunk_seconds.max(12);
+                }
+                "large" => {
+                    config.threads = config.threads.min(4);
+                    config.chunk_seconds = config.chunk_seconds.max(12);
+                }
+                _ => {}
+            }
+        }
+
+        Some(config)
     }
 }
 
@@ -914,7 +2127,8 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
 
     let post_process_changed = ensure_post_process_defaults(&mut settings);
     let language_changed = ensure_selected_language_default(&mut settings);
-    if post_process_changed || language_changed {
+    let adaptive_profile_changed = ensure_adaptive_profile(app, &mut settings);
+    if post_process_changed || language_changed || adaptive_profile_changed {
         store.set("settings", serde_json::to_value(&settings).unwrap());
         persist_store(&store);
     }
@@ -943,7 +2157,8 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
 
     let post_process_changed = ensure_post_process_defaults(&mut settings);
     let language_changed = ensure_selected_language_default(&mut settings);
-    if post_process_changed || language_changed {
+    let adaptive_profile_changed = ensure_adaptive_profile(app, &mut settings);
+    if post_process_changed || language_changed || adaptive_profile_changed {
         store.set("settings", serde_json::to_value(&settings).unwrap());
         persist_store(&store);
     }
@@ -958,6 +2173,85 @@ pub fn write_settings(app: &AppHandle, settings: AppSettings) {
 
     store.set("settings", serde_json::to_value(&settings).unwrap());
     persist_store(&store);
+}
+
+fn whisper_config_mut<'a>(
+    profile: &'a mut AdaptiveMachineProfile,
+    model_id: &str,
+) -> Option<&'a mut WhisperModelAdaptiveConfig> {
+    match model_id {
+        "small" => Some(&mut profile.whisper.small),
+        "medium" => Some(&mut profile.whisper.medium),
+        "turbo" => Some(&mut profile.whisper.turbo),
+        "large" => Some(&mut profile.whisper.large),
+        _ => None,
+    }
+}
+
+pub fn set_active_runtime_model(app: &AppHandle, model_id: Option<String>) {
+    let mut settings = get_settings(app);
+    if let Some(profile) = settings.adaptive_machine_profile.as_mut() {
+        profile.active_runtime_model_id = model_id;
+        write_settings(app, settings);
+    }
+}
+
+pub fn set_active_whisper_backend(
+    app: &AppHandle,
+    model_id: &str,
+    active_backend: WhisperBackendPreference,
+    reason: Option<String>,
+) {
+    let mut settings = get_settings(app);
+    if let Some(profile) = settings.adaptive_machine_profile.as_mut() {
+        let recommended_backend = if let Some(config) = whisper_config_mut(profile, model_id) {
+            let recommended_backend = config.backend;
+            config.active_backend = active_backend;
+            config.backend_decision_reason = reason.clone();
+            Some(recommended_backend)
+        } else {
+            None
+        };
+        if let Some(recommended_backend) = recommended_backend {
+            profile.active_backend = Some(active_backend);
+            profile.recommended_backend = Some(recommended_backend);
+            profile.calibration_reason = reason;
+            write_settings(app, settings);
+        }
+    }
+}
+
+pub fn record_whisper_backend_failure(
+    app: &AppHandle,
+    model_id: &str,
+    backend: WhisperBackendPreference,
+    reason: impl Into<String>,
+    cooldown_ms: u64,
+) {
+    let mut settings = get_settings(app);
+    if let Some(profile) = settings.adaptive_machine_profile.as_mut() {
+        if let Some(config) = whisper_config_mut(profile, model_id) {
+            let failed_at_ms = now_ms();
+            let unsafe_until_ms = failed_at_ms.saturating_add(cooldown_ms);
+            let reason = reason.into();
+            config.failure_count = config.failure_count.saturating_add(1);
+            config.last_failure_reason = Some(reason.clone());
+            config.last_failure_at = Some(failed_at_ms);
+            config.unsafe_until = Some(unsafe_until_ms);
+            config
+                .unsafe_backends
+                .retain(|entry| entry.backend != backend);
+            config.unsafe_backends.push(UnsafeBackendRecord {
+                backend,
+                unsafe_until_ms,
+                reason: reason.clone(),
+                failed_at_ms,
+            });
+            profile.calibration_state = AdaptiveCalibrationState::FallbackApplied;
+            profile.calibration_reason = Some(reason);
+            write_settings(app, settings);
+        }
+    }
 }
 
 pub fn get_bindings(app: &AppHandle) -> HashMap<String, ShortcutBinding> {

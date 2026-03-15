@@ -5,6 +5,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { ask } from "@tauri-apps/plugin-dialog";
 import { ChevronDown, Globe, RefreshCcw, X } from "lucide-react";
@@ -25,8 +26,10 @@ const modelSupportsLanguage = (model: ModelInfo, langCode: string): boolean => {
 };
 
 const getModelRank = (model: ModelInfo): number => {
-  if (model.id === "turbo") return 1000;
+  if (model.id === "parakeet-tdt-0.6b-v3-multilingual") return 1000;
+  if (model.id === "parakeet-tdt-0.6b-v3-english") return 980;
   if (model.id === "large") return 950;
+  if (model.id === "turbo") return 900;
   if (model.id === "parakeet-tdt-0.6b-v2") return 850;
   if (model.id === "medium") return 800;
   if (model.id === "small") return 700;
@@ -36,8 +39,6 @@ const getModelRank = (model: ModelInfo): number => {
   if (model.id === "moonshine-small-streaming-en") return 540;
   if (model.id === "moonshine-base") return 520;
   if (model.id === "moonshine-tiny-streaming-en") return 500;
-  if (model.id === "parakeet-tdt-0.6b-v3-english") return 360;
-  if (model.id === "parakeet-tdt-0.6b-v3-multilingual") return 340;
   if (model.id === "gemini-api") return 200;
   return Math.round(model.accuracy_score * 1000 + model.speed_score * 100);
 };
@@ -299,8 +300,17 @@ const ProcessingModelsSection: React.FC = () => {
 
 type ModelsTab = "transcription" | "processing";
 
+interface AdaptiveProfileSnapshot {
+  machine_tier: "low" | "medium" | "high";
+  recommended_model_id: string;
+  active_runtime_model_id?: string | null;
+  npu_detected?: boolean;
+  npu_kind?: "none" | "qualcomm" | "intel" | "amd" | "unknown";
+  copilot_plus_detected?: boolean;
+}
+
 export const ModelsSettings: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState<ModelsTab>("transcription");
   const [switchingModelId, setSwitchingModelId] = useState<string | null>(null);
   const [languageFilter, setLanguageFilter] = useState("all");
@@ -308,6 +318,8 @@ export const ModelsSettings: React.FC = () => {
   const [languageSearch, setLanguageSearch] = useState("");
   const [showGeminiKeyDialog, setShowGeminiKeyDialog] = useState(false);
   const [geminiKeyInput, setGeminiKeyInput] = useState("");
+  const [adaptiveProfile, setAdaptiveProfile] =
+    useState<AdaptiveProfileSnapshot | null>(null);
   const languageDropdownRef = useRef<HTMLDivElement>(null);
   const languageSearchInputRef = useRef<HTMLInputElement>(null);
   const { getSetting, updateSetting } = useSettings();
@@ -324,6 +336,12 @@ export const ModelsSettings: React.FC = () => {
     selectModel,
     deleteModel,
   } = useModelStore();
+
+  useEffect(() => {
+    invoke<AdaptiveProfileSnapshot | null>("get_adaptive_runtime_profile")
+      .then((profile) => setAdaptiveProfile(profile))
+      .catch(() => setAdaptiveProfile(null));
+  }, []);
 
   // click outside handler for language dropdown
   useEffect(() => {
@@ -431,6 +449,16 @@ export const ModelsSettings: React.FC = () => {
     await downloadModel(modelId);
   };
 
+  const handleProductModeSelect = async (modelId: string) => {
+    const model = models.find((entry) => entry.id === modelId);
+    if (!model) return;
+    if (!model.is_downloaded) {
+      await handleModelDownload(modelId);
+      return;
+    }
+    await handleModelSelect(modelId);
+  };
+
   const handleModelDelete = async (modelId: string) => {
     const model = models.find((m: ModelInfo) => m.id === modelId);
     const modelName = model?.name || modelId;
@@ -515,6 +543,53 @@ export const ModelsSettings: React.FC = () => {
     hasGeminiKey,
   ]);
 
+  const productModes = useMemo(() => {
+    const rapidId = i18n.language.startsWith("en")
+      ? "parakeet-tdt-0.6b-v3-english"
+      : "parakeet-tdt-0.6b-v3-multilingual";
+    const balancedId =
+      adaptiveProfile?.machine_tier === "low" ? "small" : "turbo";
+    return [
+      {
+        id: "auto",
+        label: t("settings.models.modes.auto", { defaultValue: "Auto" }),
+        description: t("settings.models.modes.autoDescription", {
+          defaultValue: "Uses the best fit for this machine",
+        }),
+        modelId: adaptiveProfile?.recommended_model_id ?? rapidId,
+      },
+      {
+        id: "fast",
+        label: t("settings.models.modes.fast", { defaultValue: "Rapide" }),
+        description: t("settings.models.modes.fastDescription", {
+          defaultValue: "Lowest latency for quick dictation",
+        }),
+        modelId: rapidId,
+      },
+      {
+        id: "balanced",
+        label: t("settings.models.modes.balanced", {
+          defaultValue: "Équilibré",
+        }),
+        description: t("settings.models.modes.balancedDescription", {
+          defaultValue: "Good quality without getting too heavy",
+        }),
+        modelId: balancedId,
+      },
+      {
+        id: "quality",
+        label: t("settings.models.modes.quality", { defaultValue: "Qualité" }),
+        description: t("settings.models.modes.qualityDescription", {
+          defaultValue: "Highest text quality on stronger machines",
+        }),
+        modelId: "large",
+      },
+    ].map((entry) => ({
+      ...entry,
+      model: models.find((model) => model.id === entry.modelId) ?? null,
+    }));
+  }, [adaptiveProfile, i18n.language, models, t]);
+
   if (loading) {
     return (
       <div className="max-w-3xl w-full mx-auto">
@@ -531,6 +606,64 @@ export const ModelsSettings: React.FC = () => {
         <h1 className="text-xl font-semibold mb-2">
           {t("settings.models.title")}
         </h1>
+        {(adaptiveProfile?.copilot_plus_detected ||
+          adaptiveProfile?.npu_detected) && (
+          <div className="rounded-xl border border-logo-primary/25 bg-logo-primary/5 px-4 py-3 mt-4">
+            <p className="text-sm font-semibold text-text">
+              {adaptiveProfile?.copilot_plus_detected
+                ? t("settings.models.hardware.copilotPlusTitle", {
+                    defaultValue: "Copilot+ PC detected",
+                  })
+                : t("settings.models.hardware.npuTitle", {
+                    defaultValue: "NPU detected",
+                  })}
+            </p>
+            <p className="text-xs text-text/60 mt-1">
+              {adaptiveProfile?.copilot_plus_detected
+                ? t("settings.models.hardware.copilotPlusDescription", {
+                    defaultValue:
+                      "VocalType will keep this capability in the adaptive profile, but true NPU execution still depends on the model runtime.",
+                  })
+                : t("settings.models.hardware.npuDescription", {
+                    defaultValue:
+                      "This machine exposes a neural processor. VocalType now shows it in diagnostics and hardware profiling.",
+                  })}
+            </p>
+          </div>
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+          {productModes.map(({ id, label, description, modelId, model }) => {
+            const isActiveMode =
+              (adaptiveProfile?.active_runtime_model_id || currentModel) === modelId;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleProductModeSelect(modelId)}
+                className={`rounded-xl border p-4 text-left transition-all ${
+                  isActiveMode
+                    ? "border-logo-primary/50 bg-logo-primary/10"
+                    : "border-mid-gray/20 bg-mid-gray/5 hover:border-logo-primary/35 hover:bg-logo-primary/5"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-text">{label}</p>
+                    <p className="text-xs text-text/60 mt-1">{description}</p>
+                  </div>
+                  {id === "auto" && (
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-logo-primary">
+                      {t("onboarding.recommended")}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-text/50 mt-3">
+                  {model?.name ?? modelId}
+                </p>
+              </button>
+            );
+          })}
+        </div>
         <div className="flex gap-1 mt-3 p-0.5 bg-mid-gray/10 rounded-lg w-fit">
           {(["transcription", "processing"] as const).map((tab) => (
             <button

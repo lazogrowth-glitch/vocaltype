@@ -11,6 +11,8 @@ use ort::session::builder::SessionBuilder;
 pub enum ExecutionProvider {
     #[default]
     Cpu,
+    #[cfg(feature = "qnn")]
+    Qnn,
     #[cfg(feature = "cuda")]
     Cuda,
     #[cfg(feature = "tensorrt")]
@@ -23,6 +25,10 @@ pub enum ExecutionProvider {
     ROCm,
     #[cfg(feature = "openvino")]
     OpenVINO,
+    #[cfg(feature = "openvino")]
+    OpenVinoNpu,
+    #[cfg(feature = "openvino")]
+    OpenVinoGpu,
     #[cfg(feature = "webgpu")]
     WebGPU,
 }
@@ -75,6 +81,7 @@ impl ModelConfig {
             feature = "directml",
             feature = "rocm",
             feature = "openvino",
+            feature = "qnn",
             feature = "webgpu"
         ))]
         use ort::execution_providers::CPUExecutionProvider;
@@ -87,6 +94,33 @@ impl ModelConfig {
 
         builder = match self.execution_provider {
             ExecutionProvider::Cpu => builder,
+
+            #[cfg(feature = "qnn")]
+            ExecutionProvider::Qnn => {
+                use ort::execution_providers::qnn::{
+                    QNNContextPriority, QNNExecutionProvider, QNNPerformanceMode,
+                };
+
+                #[cfg(target_os = "windows")]
+                let qnn = QNNExecutionProvider::default()
+                    .with_backend_path("QnnHtp.dll")
+                    .with_performance_mode(QNNPerformanceMode::Balanced)
+                    .with_context_priority(QNNContextPriority::NormalHigh)
+                    .with_offload_graph_io_quantization(true)
+                    .with_htp_weight_sharing(true);
+
+                #[cfg(not(target_os = "windows"))]
+                let qnn = QNNExecutionProvider::default()
+                    .with_performance_mode(QNNPerformanceMode::Balanced)
+                    .with_context_priority(QNNContextPriority::NormalHigh)
+                    .with_offload_graph_io_quantization(true)
+                    .with_htp_weight_sharing(true);
+
+                builder.with_execution_providers([
+                    qnn.build(),
+                    CPUExecutionProvider::default().build().error_on_failure(),
+                ])?
+            }
 
             #[cfg(feature = "cuda")]
             ExecutionProvider::Cuda => builder.with_execution_providers([
@@ -128,6 +162,24 @@ impl ModelConfig {
             #[cfg(feature = "openvino")]
             ExecutionProvider::OpenVINO => builder.with_execution_providers([
                 ort::execution_providers::OpenVINOExecutionProvider::default().build(),
+                CPUExecutionProvider::default().build().error_on_failure(),
+            ])?,
+
+            #[cfg(feature = "openvino")]
+            ExecutionProvider::OpenVinoNpu => builder.with_execution_providers([
+                ort::execution_providers::OpenVINOExecutionProvider::default()
+                    .with_device_type("NPU")
+                    .with_qdq_optimizer(true)
+                    .build(),
+                CPUExecutionProvider::default().build().error_on_failure(),
+            ])?,
+
+            #[cfg(feature = "openvino")]
+            ExecutionProvider::OpenVinoGpu => builder.with_execution_providers([
+                ort::execution_providers::OpenVINOExecutionProvider::default()
+                    .with_device_type("GPU")
+                    .with_qdq_optimizer(true)
+                    .build(),
                 CPUExecutionProvider::default().build().error_on_failure(),
             ])?,
 

@@ -1,12 +1,16 @@
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
+use crate::context_detector::{
+    detect_current_app_context, ActiveAppContextState,
+};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
 use crate::managers::model::{EngineType, ModelInfo, ModelManager};
-use crate::managers::transcription::TranscriptionManager;
+use crate::managers::transcription::{TranscriptionManager, TranscriptionRequest};
 use crate::runtime_observability::{
-    emit_lifecycle_state, emit_runtime_error, RuntimeErrorStage, TranscriptionLifecycleState,
+    emit_lifecycle_state, emit_pipeline_profile, emit_runtime_error, PipelineProfileEvent,
+    PipelineStepTiming, RuntimeErrorStage, TranscriptionLifecycleState,
 };
 use crate::settings::{get_settings, AppSettings, APPLE_INTELLIGENCE_PROVIDER_ID};
 use crate::shortcut;
@@ -19,8 +23,9 @@ use ferrous_opencc::{config::BuiltinConfig, OpenCC};
 use log::{debug, error, info, warn};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_clipboard_manager::ClipboardExt;
 
@@ -42,6 +47,100 @@ fn emit_paste_failed_event(app: &AppHandle, reason: impl Into<String>, copied_to
     );
 }
 
+struct PipelineProfiler {
+    binding_id: String,
+    path: String,
+    started_at: Instant,
+    model_id: Option<String>,
+    model_name: Option<String>,
+    audio_duration_ms: Option<u64>,
+    transcription_chars: usize,
+    completed: bool,
+    error_code: Option<String>,
+    steps: Vec<PipelineStepTiming>,
+}
+
+impl PipelineProfiler {
+    fn new(
+        binding_id: impl Into<String>,
+        path: impl Into<String>,
+        model_id: Option<String>,
+        model_name: Option<String>,
+    ) -> Self {
+        Self {
+            binding_id: binding_id.into(),
+            path: path.into(),
+            started_at: Instant::now(),
+            model_id,
+            model_name,
+            audio_duration_ms: None,
+            transcription_chars: 0,
+            completed: false,
+            error_code: None,
+            steps: Vec::new(),
+        }
+    }
+
+    fn push_step(&mut self, step: impl Into<String>, duration: Duration, detail: Option<String>) {
+        self.steps.push(PipelineStepTiming {
+            step: step.into(),
+            duration_ms: duration.as_millis() as u64,
+            detail,
+        });
+    }
+
+    fn push_step_since(
+        &mut self,
+        step: impl Into<String>,
+        started_at: Instant,
+        detail: Option<String>,
+    ) {
+        self.push_step(step, started_at.elapsed(), detail);
+    }
+
+    fn set_audio_duration_samples(&mut self, samples_len: usize) {
+        self.audio_duration_ms = Some(((samples_len as f64 / 16_000.0) * 1000.0).round() as u64);
+    }
+
+    fn set_model(&mut self, model_id: Option<String>, model_name: Option<String>) {
+        self.model_id = model_id;
+        self.model_name = model_name;
+    }
+
+    fn set_transcription_chars(&mut self, transcription: &str) {
+        self.transcription_chars = transcription.chars().count();
+    }
+
+    fn mark_completed(&mut self) {
+        self.completed = true;
+        self.error_code = None;
+    }
+
+    fn mark_error(&mut self, error_code: impl Into<String>) {
+        self.completed = false;
+        self.error_code = Some(error_code.into());
+    }
+
+    fn emit(&self, app: &AppHandle) {
+        emit_pipeline_profile(
+            app,
+            PipelineProfileEvent {
+                binding_id: self.binding_id.clone(),
+                created_at_ms: crate::runtime_observability::now_ms(),
+                path: self.path.clone(),
+                model_id: self.model_id.clone(),
+                model_name: self.model_name.clone(),
+                audio_duration_ms: self.audio_duration_ms,
+                transcription_chars: self.transcription_chars,
+                total_duration_ms: self.started_at.elapsed().as_millis() as u64,
+                completed: self.completed,
+                error_code: self.error_code.clone(),
+                steps: self.steps.clone(),
+            },
+        );
+    }
+}
+
 // ── Streaming chunk constants ────────────────────────────────────────────────
 const PARAKEET_V3_LEGACY_ID: &str = "parakeet-tdt-0.6b-v3";
 const PARAKEET_V3_ENGLISH_ID: &str = "parakeet-tdt-0.6b-v3-english";
@@ -51,6 +150,31 @@ const PARAKEET_V3_MULTILINGUAL_ID: &str = "parakeet-tdt-0.6b-v3-multilingual";
 const DEFAULT_CHUNK_INTERVAL_SAMPLES: usize = 15 * 16_000; // 15 s at 16 kHz
 /// Overlap kept at the START of each new chunk to avoid cutting words at boundaries.
 const DEFAULT_CHUNK_OVERLAP_SAMPLES: usize = 8_000; // 0.5 s
+/// Whisper Small benchmarks best with slightly larger chunks on weak PCs:
+/// small enough to reduce key-up latency, large enough to avoid chunk storms.
+const WHISPER_SMALL_CHUNK_INTERVAL_SAMPLES: usize = 12 * 16_000; // 12 s
+const WHISPER_SMALL_CHUNK_OVERLAP_SAMPLES: usize = 8_000; // 0.5 s
+/// Whisper Medium is still tuned for latency, but stays conservative enough
+/// to avoid the short-chunk accuracy collapse seen on slow machines.
+const WHISPER_MEDIUM_CHUNK_INTERVAL_SAMPLES: usize = 6 * 16_000; // 6 s
+const WHISPER_MEDIUM_CHUNK_OVERLAP_SAMPLES: usize = 8_000; // 0.5 s
+/// Whisper Turbo also stays healthier with larger chunks on low-end hardware.
+/// This trims total chunk count and reduces the expensive tail assembly phase.
+const WHISPER_TURBO_CHUNK_INTERVAL_SAMPLES: usize = 12 * 16_000; // 12 s
+const WHISPER_TURBO_CHUNK_OVERLAP_SAMPLES: usize = 8_000; // 0.5 s
+/// Whisper Large stays more quality-oriented, but should still avoid long
+/// "all the work happens after key-up" behavior.
+const WHISPER_LARGE_CHUNK_INTERVAL_SAMPLES: usize = 8 * 16_000; // 8 s
+const WHISPER_LARGE_CHUNK_OVERLAP_SAMPLES: usize = 12_000; // 0.75 s
+/// Shorter polling reduces how long a ready chunk waits before getting sent.
+const CHUNK_SAMPLER_POLL_MS: u64 = 200;
+/// Prevent Whisper from queueing many background chunks when the model is
+/// slower than real time on the current machine.
+const MAX_PENDING_BACKGROUND_CHUNKS: usize = 1;
+/// English Parakeet profile tuned to reduce long-utterance truncation without
+/// falling back to very small, repetition-prone chunks.
+const PARAKEET_V3_EN_CHUNK_INTERVAL_SAMPLES: usize = 20 * 16_000; // 20 s at 16 kHz
+const PARAKEET_V3_EN_CHUNK_OVERLAP_SAMPLES: usize = 16_000; // 1 s
 /// French-first multilingual Parakeet profile tuned for lower EN drift.
 const PARAKEET_V3_MULTI_CHUNK_INTERVAL_SAMPLES: usize = 5 * 16_000; // 5 s at 16 kHz
 /// Small overlap limits boundary cuts while keeping tight chunks.
@@ -73,6 +197,7 @@ pub(crate) struct ChunkingHandle {
     chunk_tx: std::sync::mpsc::Sender<Option<(Vec<f32>, usize)>>,
     shared_state: Arc<Mutex<ChunkingSharedState>>,
     results: Arc<Mutex<Vec<(usize, String)>>>,
+    pending_chunks: Arc<AtomicUsize>,
     chunk_overlap_samples: usize,
 }
 
@@ -85,9 +210,43 @@ fn is_parakeet_v3_model_id(model_id: &str) -> bool {
     )
 }
 
-fn chunking_profile_for_model(model_info: Option<&ModelInfo>) -> Option<ChunkingProfile> {
+fn chunking_profile_for_model(
+    model_info: Option<&ModelInfo>,
+    settings: &AppSettings,
+) -> Option<ChunkingProfile> {
     match model_info {
-        Some(info) if info.id == PARAKEET_V3_ENGLISH_ID => None,
+        Some(info) if matches!(info.id.as_str(), "small" | "medium" | "turbo" | "large") => {
+            if let Some(config) = settings.adaptive_whisper_config(&info.id) {
+                return Some(ChunkingProfile {
+                    interval_samples: usize::from(config.chunk_seconds) * 16_000,
+                    overlap_samples: (usize::from(config.overlap_ms) * 16_000) / 1000,
+                });
+            }
+
+            match info.id.as_str() {
+                "small" => Some(ChunkingProfile {
+                    interval_samples: WHISPER_SMALL_CHUNK_INTERVAL_SAMPLES,
+                    overlap_samples: WHISPER_SMALL_CHUNK_OVERLAP_SAMPLES,
+                }),
+                "medium" => Some(ChunkingProfile {
+                    interval_samples: WHISPER_MEDIUM_CHUNK_INTERVAL_SAMPLES,
+                    overlap_samples: WHISPER_MEDIUM_CHUNK_OVERLAP_SAMPLES,
+                }),
+                "turbo" => Some(ChunkingProfile {
+                    interval_samples: WHISPER_TURBO_CHUNK_INTERVAL_SAMPLES,
+                    overlap_samples: WHISPER_TURBO_CHUNK_OVERLAP_SAMPLES,
+                }),
+                "large" => Some(ChunkingProfile {
+                    interval_samples: WHISPER_LARGE_CHUNK_INTERVAL_SAMPLES,
+                    overlap_samples: WHISPER_LARGE_CHUNK_OVERLAP_SAMPLES,
+                }),
+                _ => None,
+            }
+        }
+        Some(info) if info.id == PARAKEET_V3_ENGLISH_ID => Some(ChunkingProfile {
+            interval_samples: PARAKEET_V3_EN_CHUNK_INTERVAL_SAMPLES,
+            overlap_samples: PARAKEET_V3_EN_CHUNK_OVERLAP_SAMPLES,
+        }),
         Some(info)
             if matches!(
                 info.id.as_str(),
@@ -235,11 +394,19 @@ fn resolve_runtime_model_override(
 
 /// Drop guard that notifies the [`TranscriptionCoordinator`] when the
 /// transcription pipeline finishes — whether it completes normally or panics.
-struct FinishGuard(AppHandle);
+struct FinishGuard {
+    app: AppHandle,
+    binding_id: String,
+}
 impl Drop for FinishGuard {
     fn drop(&mut self) {
-        if let Some(c) = self.0.try_state::<TranscriptionCoordinator>() {
+        if let Some(c) = self.app.try_state::<TranscriptionCoordinator>() {
             c.notify_processing_finished();
+        }
+        if let Some(state) = self.app.try_state::<ActiveAppContextState>() {
+            if let Ok(mut snapshot) = state.0.lock() {
+                snapshot.clear_active_context(&self.binding_id);
+            }
         }
     }
 }
@@ -785,6 +952,7 @@ impl ShortcutAction for TranscribeAction {
     fn start(&self, app: &AppHandle, binding_id: &str, _shortcut_str: &str) {
         let start_time = Instant::now();
         debug!("TranscribeAction::start called for binding: {}", binding_id);
+        let captured_app_context = detect_current_app_context();
 
         // Load model in the background
         let tm = app.state::<Arc<TranscriptionManager>>();
@@ -841,6 +1009,11 @@ impl ShortcutAction for TranscribeAction {
         }
 
         if recording_started {
+            if let Some(state) = app.try_state::<ActiveAppContextState>() {
+                if let Ok(mut snapshot) = state.0.lock() {
+                    snapshot.set_active_context(&binding_id, captured_app_context.clone());
+                }
+            }
             shortcut::register_cancel_shortcut(app);
             shortcut::register_pause_shortcut(app);
             shortcut::register_action_shortcuts(app);
@@ -854,7 +1027,8 @@ impl ShortcutAction for TranscribeAction {
                 }?;
                 mm.get_model_info(&model_id)
             });
-            let chunking_profile = chunking_profile_for_model(current_model_info.as_ref());
+            let chunking_profile =
+                chunking_profile_for_model(current_model_info.as_ref(), &settings);
 
             // ── Spawn background streaming transcription ──────────────────────────
             // The sampler wakes every 500 ms and sends a chunk once enough new
@@ -864,21 +1038,24 @@ impl ShortcutAction for TranscribeAction {
             if let Some(chunking_profile) = chunking_profile {
                 let rm_s = Arc::clone(&*app.state::<Arc<AudioRecordingManager>>());
                 let tm_s = Arc::clone(&*app.state::<Arc<TranscriptionManager>>());
+                let chunk_context = captured_app_context.clone();
 
                 let shared_state = Arc::new(Mutex::new(ChunkingSharedState {
                     last_committed_idx: 0,
                     next_chunk_idx: 0,
                 }));
                 let results: Arc<Mutex<Vec<(usize, String)>>> = Arc::new(Mutex::new(Vec::new()));
+                let pending_chunks = Arc::new(AtomicUsize::new(0));
 
                 let (chunk_tx, chunk_rx) = std::sync::mpsc::channel::<Option<(Vec<f32>, usize)>>();
 
-                // Sampler thread: polls audio every 500 ms and sends profile-sized chunks.
+                // Sampler thread: polls audio frequently and sends profile-sized chunks.
                 let shared_s = Arc::clone(&shared_state);
                 let tx_s = chunk_tx.clone();
+                let pending_s = Arc::clone(&pending_chunks);
                 let sampler_handle = std::thread::spawn(move || {
                     loop {
-                        std::thread::sleep(std::time::Duration::from_millis(500));
+                        std::thread::sleep(std::time::Duration::from_millis(CHUNK_SAMPLER_POLL_MS));
 
                         let snapshot = match rm_s.snapshot_recording() {
                             Some(s) => s,
@@ -893,6 +1070,15 @@ impl ShortcutAction for TranscribeAction {
                         let new_samples = total.saturating_sub(last_committed);
 
                         if new_samples >= chunking_profile.interval_samples {
+                            let pending = pending_s.load(Ordering::Relaxed);
+                            if pending >= MAX_PENDING_BACKGROUND_CHUNKS {
+                                debug!(
+                                    "Chunk sampler: pending backlog={} for interval {:.1}s, waiting before sending more",
+                                    pending,
+                                    chunking_profile.interval_samples as f32 / 16_000.0
+                                );
+                                continue;
+                            }
                             // Include overlap at the start to avoid cutting words.
                             let overlap_start =
                                 last_committed.saturating_sub(chunking_profile.overlap_samples);
@@ -909,7 +1095,9 @@ impl ShortcutAction for TranscribeAction {
                                 chunking_profile.interval_samples as f32 / 16_000.0,
                                 chunking_profile.overlap_samples as f32 / 16_000.0
                             );
+                            pending_s.fetch_add(1, Ordering::Relaxed);
                             if tx_s.send(Some((chunk, next_idx))).is_err() {
+                                pending_s.fetch_sub(1, Ordering::Relaxed);
                                 break;
                             }
                         }
@@ -919,6 +1107,7 @@ impl ShortcutAction for TranscribeAction {
 
                 // Worker thread: transcribes chunks sequentially
                 let results_w = Arc::clone(&results);
+                let pending_w = Arc::clone(&pending_chunks);
                 let worker_handle = std::thread::spawn(move || {
                     while let Ok(Some((samples, idx))) = chunk_rx.recv() {
                         debug!(
@@ -926,7 +1115,10 @@ impl ShortcutAction for TranscribeAction {
                             idx,
                             samples.len() as f32 / 16_000.0
                         );
-                        let text = match tm_s.transcribe(samples) {
+                        let text = match tm_s.transcribe_request(TranscriptionRequest {
+                            audio: samples,
+                            app_context: Some(chunk_context.clone()),
+                        }) {
                             Ok(text) => text,
                             Err(err) => {
                                 warn!("Chunk worker: failed to transcribe chunk {}: {}", idx, err);
@@ -937,6 +1129,7 @@ impl ShortcutAction for TranscribeAction {
                             debug!("Chunk {}: '{:.60}...'", idx, text);
                             results_w.lock().unwrap().push((idx, text));
                         }
+                        pending_w.fetch_sub(1, Ordering::Relaxed);
                     }
                     debug!("Chunk worker thread exited");
                 });
@@ -948,6 +1141,7 @@ impl ShortcutAction for TranscribeAction {
                         chunk_tx,
                         shared_state,
                         results,
+                        pending_chunks,
                         chunk_overlap_samples: chunking_profile.overlap_samples,
                     });
                 }
@@ -991,6 +1185,15 @@ impl ShortcutAction for TranscribeAction {
 
         let binding_id = binding_id.to_string(); // Clone binding_id for the async task
         let post_process = self.post_process;
+        let active_app_context = if let Some(state) = app.try_state::<ActiveAppContextState>() {
+            if let Ok(snapshot) = state.0.lock() {
+                snapshot.active_context_for_binding(&binding_id)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         // Read and clear the selected action before spawning the async task
         let selected_action_key =
@@ -1010,8 +1213,21 @@ impl ShortcutAction for TranscribeAction {
             .flatten();
 
         tauri::async_runtime::spawn(async move {
-            let _guard = FinishGuard(ah.clone());
+            let _guard = FinishGuard {
+                app: ah.clone(),
+                binding_id: binding_id.clone(),
+            };
             let binding_id = binding_id.clone();
+            let profiler = Arc::new(Mutex::new(PipelineProfiler::new(
+                binding_id.clone(),
+                if chunking_handle.is_some() {
+                    "chunked"
+                } else {
+                    "single-shot"
+                },
+                tm.get_current_model(),
+                tm.get_current_model_name(),
+            )));
             debug!(
                 "Starting async transcription task for binding: {}, action: {:?}",
                 binding_id, selected_action_key
@@ -1051,11 +1267,28 @@ impl ShortcutAction for TranscribeAction {
                             reason,
                             true,
                         );
+                        if let Ok(mut p) = profiler.lock() {
+                            p.mark_error("CAPTURE_NO_SAMPLES");
+                            p.push_step_since(
+                                "stop_recording",
+                                stop_recording_time,
+                                Some("chunked-path".to_string()),
+                            );
+                            p.emit(&ah);
+                        }
                         utils::hide_recording_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
                         return;
                     }
                 };
+                if let Ok(mut p) = profiler.lock() {
+                    p.set_audio_duration_samples(all_samples.len());
+                    p.push_step_since(
+                        "stop_recording",
+                        stop_recording_time,
+                        Some("chunked-path".to_string()),
+                    );
+                }
                 debug!(
                     "Recording stopped in {:?}, {} samples total",
                     stop_recording_time.elapsed(),
@@ -1065,6 +1298,7 @@ impl ShortcutAction for TranscribeAction {
                 // Run the blocking work (join sampler, flush final chunk, join
                 // worker, assemble results) on a dedicated blocking thread so we
                 // don't stall the async executor.
+                let chunk_finalize_started = Instant::now();
                 let (assembled, chunk_count, all_samples) =
                     tokio::task::spawn_blocking(move || {
                         // Wait for sampler to notice that recording has stopped
@@ -1082,7 +1316,10 @@ impl ShortcutAction for TranscribeAction {
                         let remaining = all_samples[overlap_start..].to_vec();
                         let sent_final = !remaining.is_empty();
                         if sent_final {
-                            let _ = ch.chunk_tx.send(Some((remaining, next_idx)));
+                            ch.pending_chunks.fetch_add(1, Ordering::Relaxed);
+                            if ch.chunk_tx.send(Some((remaining, next_idx))).is_err() {
+                                ch.pending_chunks.fetch_sub(1, Ordering::Relaxed);
+                            }
                         }
                         // Signal the worker to shut down
                         let _ = ch.chunk_tx.send(None);
@@ -1114,6 +1351,13 @@ impl ShortcutAction for TranscribeAction {
                     })
                     .await
                     .unwrap_or_else(|_| (String::new(), 0, Vec::new()));
+                if let Ok(mut p) = profiler.lock() {
+                    p.push_step_since(
+                        "chunk_finalize_and_assemble",
+                        chunk_finalize_started,
+                        Some(format!("chunks={}", chunk_count)),
+                    );
+                }
 
                 debug!(
                     "Chunked assembly done: {} chunks → '{}' (first 80 chars)",
@@ -1122,6 +1366,7 @@ impl ShortcutAction for TranscribeAction {
                 );
 
                 // Optional cleanup pass: fix language + boundary artifacts
+                let chunk_cleanup_started = Instant::now();
                 let transcription = if chunk_count >= 2 && !assembled.is_empty() {
                     let settings_for_cleanup = get_settings(&ah);
                     cleanup_assembled_transcription(&settings_for_cleanup, &assembled)
@@ -1130,6 +1375,16 @@ impl ShortcutAction for TranscribeAction {
                 } else {
                     assembled
                 };
+                if let Ok(mut p) = profiler.lock() {
+                    p.push_step_since(
+                        "chunk_cleanup",
+                        chunk_cleanup_started,
+                        Some(format!(
+                            "applied={}",
+                            chunk_count >= 2 && !transcription.is_empty()
+                        )),
+                    );
+                }
 
                 Some(TranscriptionResult {
                     samples: all_samples,
@@ -1153,11 +1408,28 @@ impl ShortcutAction for TranscribeAction {
                             reason,
                             true,
                         );
+                        if let Ok(mut p) = profiler.lock() {
+                            p.mark_error("CAPTURE_NO_SAMPLES");
+                            p.push_step_since(
+                                "stop_recording",
+                                stop_recording_time,
+                                Some("single-shot-path".to_string()),
+                            );
+                            p.emit(&ah);
+                        }
                         utils::hide_recording_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
                         return;
                     }
                 };
+                if let Ok(mut p) = profiler.lock() {
+                    p.set_audio_duration_samples(samples.len());
+                    p.push_step_since(
+                        "stop_recording",
+                        stop_recording_time,
+                        Some("single-shot-path".to_string()),
+                    );
+                }
                 debug!(
                     "Recording stopped in {:?}, {} samples",
                     stop_recording_time.elapsed(),
@@ -1179,6 +1451,7 @@ impl ShortcutAction for TranscribeAction {
                     &settings_for_model,
                 ) {
                     if original_model.as_deref() != Some(fallback_model.id.as_str()) {
+                        let model_switch_started = Instant::now();
                         info!(
                             "{}. Temporarily switching from Parakeet V3 to '{}' ({})",
                             reason, fallback_model.name, fallback_model.id
@@ -1191,6 +1464,17 @@ impl ShortcutAction for TranscribeAction {
                             );
                         } else {
                             switched_model = true;
+                            if let Ok(mut p) = profiler.lock() {
+                                p.set_model(
+                                    Some(fallback_model.id.clone()),
+                                    Some(fallback_model.name.clone()),
+                                );
+                                p.push_step_since(
+                                    "model_switch_runtime_override",
+                                    model_switch_started,
+                                    Some(reason),
+                                );
+                            }
                         }
                     }
                 } else if let Some(info) = selected_model_info.as_ref() {
@@ -1210,6 +1494,7 @@ impl ShortcutAction for TranscribeAction {
                     if duration_seconds > settings_for_model.long_audio_threshold_seconds
                         && original_model.as_deref() != Some(long_model_id.as_str())
                     {
+                        let long_model_switch_started = Instant::now();
                         debug!(
                             "Audio {:.1}s > threshold {:.1}s, switching to long model: {}",
                             duration_seconds,
@@ -1220,14 +1505,43 @@ impl ShortcutAction for TranscribeAction {
                             warn!("Failed to load long audio model: {}", e);
                         } else {
                             switched_model = true;
+                            if let Ok(mut p) = profiler.lock() {
+                                p.set_model(
+                                    Some(long_model_id.clone()),
+                                    tm.get_current_model_name(),
+                                );
+                                p.push_step_since(
+                                    "model_switch_long_audio",
+                                    long_model_switch_started,
+                                    Some(format!(
+                                        "{:.1}s>{:.1}s",
+                                        duration_seconds,
+                                        settings_for_model.long_audio_threshold_seconds
+                                    )),
+                                );
+                            }
                         }
                     }
                 }
 
                 let transcription_time = Instant::now();
                 let samples_clone_fb = samples.clone();
-                let transcription = match tm.transcribe(samples.clone()) {
+                let transcription = match tm.transcribe_request(TranscriptionRequest {
+                    audio: samples.clone(),
+                    app_context: active_app_context.clone(),
+                }) {
                     Ok(mut text) => {
+                        if let Ok(mut p) = profiler.lock() {
+                            p.push_step_since(
+                                "transcribe_primary",
+                                transcription_time,
+                                Some(format!(
+                                    "chars={}, duration_s={:.2}",
+                                    text.chars().count(),
+                                    duration_seconds
+                                )),
+                            );
+                        }
                         debug!(
                             "Transcription in {:?}: '{}'",
                             transcription_time.elapsed(),
@@ -1237,15 +1551,32 @@ impl ShortcutAction for TranscribeAction {
                         if text.is_empty() && duration_seconds > 1.0 && !switched_model {
                             if let Some(ref long_model_id) = settings_for_model.long_audio_model {
                                 if original_model.as_deref() != Some(long_model_id.as_str()) {
+                                    let retry_started = Instant::now();
                                     info!(
                                         "Empty result for {:.1}s audio, retrying with long model",
                                         duration_seconds
                                     );
                                     if tm.load_model(long_model_id).is_ok() {
-                                        if let Ok(retry) = tm.transcribe(samples_clone_fb) {
+                                        if let Ok(retry) =
+                                            tm.transcribe_request(TranscriptionRequest {
+                                                audio: samples_clone_fb,
+                                                app_context: active_app_context.clone(),
+                                            })
+                                        {
                                             if !retry.is_empty() {
                                                 text = retry;
                                             }
+                                        }
+                                        if let Ok(mut p) = profiler.lock() {
+                                            p.set_model(
+                                                Some(long_model_id.clone()),
+                                                tm.get_current_model_name(),
+                                            );
+                                            p.push_step_since(
+                                                "transcribe_retry_long_model",
+                                                retry_started,
+                                                Some(format!("chars={}", text.chars().count())),
+                                            );
                                         }
                                     }
                                 }
@@ -1263,6 +1594,15 @@ impl ShortcutAction for TranscribeAction {
                             reason,
                             true,
                         );
+                        if let Ok(mut p) = profiler.lock() {
+                            p.mark_error("TRANSCRIPTION_FAILED");
+                            p.push_step_since(
+                                "transcribe_primary",
+                                transcription_time,
+                                Some("error".to_string()),
+                            );
+                            p.emit(&ah);
+                        }
                         utils::hide_recording_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
                         // Restore model if needed
@@ -1277,8 +1617,16 @@ impl ShortcutAction for TranscribeAction {
 
                 if switched_model {
                     if let Some(ref orig_id) = original_model {
+                        let restore_started = Instant::now();
                         if let Err(e) = tm.load_model(orig_id) {
                             warn!("Failed to restore original model: {}", e);
+                        } else if let Ok(mut p) = profiler.lock() {
+                            p.push_step_since(
+                                "restore_original_model",
+                                restore_started,
+                                Some(orig_id.clone()),
+                            );
+                            p.set_model(original_model.clone(), tm.get_current_model_name());
                         }
                     }
                 }
@@ -1297,6 +1645,13 @@ impl ShortcutAction for TranscribeAction {
                 ..
             }) = result
             {
+                if let Some(context) = active_app_context.clone() {
+                    if let Some(state) = ah.try_state::<ActiveAppContextState>() {
+                        if let Ok(mut snapshot) = state.0.lock() {
+                            snapshot.set_last_transcription_context(context);
+                        }
+                    }
+                }
                 let duration_seconds = samples.len() as f32 / 16_000.0;
                 let samples_clone = samples.clone();
 
@@ -1308,10 +1663,18 @@ impl ShortcutAction for TranscribeAction {
                     let mut final_text = transcription.clone();
 
                     // Chinese variant conversion
+                    let chinese_convert_started = Instant::now();
                     if let Some(converted) =
                         maybe_convert_chinese_variant(&settings, &transcription).await
                     {
                         final_text = converted;
+                    }
+                    if let Ok(mut p) = profiler.lock() {
+                        p.push_step_since(
+                            "post_convert_chinese_variant",
+                            chinese_convert_started,
+                            Some(format!("changed={}", final_text != transcription)),
+                        );
                     }
 
                     let selected_action = selected_action_key.and_then(|key| {
@@ -1329,6 +1692,7 @@ impl ShortcutAction for TranscribeAction {
                         }
                     }
 
+                    let post_process_started = Instant::now();
                     let processed = if let Some(ref action) = selected_action {
                         process_action(
                             &settings,
@@ -1343,6 +1707,13 @@ impl ShortcutAction for TranscribeAction {
                     } else {
                         None
                     };
+                    if let Ok(mut p) = profiler.lock() {
+                        p.push_step_since(
+                            "post_process",
+                            post_process_started,
+                            Some(format!("applied={}", processed.is_some())),
+                        );
+                    }
 
                     if let Some(processed_text) = processed {
                         post_processed_text = Some(processed_text.clone());
@@ -1367,16 +1738,35 @@ impl ShortcutAction for TranscribeAction {
                     let fallback_text = final_text.clone();
                     let main_thread_fallback_text = fallback_text.clone();
                     let paste_time = Instant::now();
+                    if let Ok(mut p) = profiler.lock() {
+                        p.set_transcription_chars(&final_text);
+                    }
                     emit_lifecycle_state(
                         &ah,
                         TranscriptionLifecycleState::Pasting,
                         None,
                         Some("paste-dispatch"),
                     );
+                    let profiler_for_paste = Arc::clone(&profiler);
                     ah.run_on_main_thread(move || {
+                        if let Ok(mut p) = profiler_for_paste.lock() {
+                            p.push_step_since("paste_dispatch_wait", paste_time, None);
+                        }
                         let text_for_fallback = fallback_text.clone();
+                        let paste_exec_started = Instant::now();
                         match utils::paste(final_text, ah_clone.clone()) {
-                            Ok(()) => debug!("Text pasted in {:?}", paste_time.elapsed()),
+                            Ok(()) => {
+                                debug!("Text pasted in {:?}", paste_time.elapsed());
+                                if let Ok(mut p) = profiler_for_paste.lock() {
+                                    p.push_step_since(
+                                        "paste_execute",
+                                        paste_exec_started,
+                                        Some("ok".to_string()),
+                                    );
+                                    p.mark_completed();
+                                    p.emit(&ah_clone);
+                                }
+                            }
                             Err(e) => {
                                 let reason = format!("Failed to paste transcription: {}", e);
                                 error!("{}", reason);
@@ -1408,6 +1798,18 @@ impl ShortcutAction for TranscribeAction {
                                     reason,
                                     copied_to_clipboard,
                                 );
+                                if let Ok(mut p) = profiler_for_paste.lock() {
+                                    p.push_step_since(
+                                        "paste_execute",
+                                        paste_exec_started,
+                                        Some(format!(
+                                            "fallback_clipboard={}",
+                                            copied_to_clipboard
+                                        )),
+                                    );
+                                    p.mark_error("PASTE_FAILED");
+                                    p.emit(&ah_clone);
+                                }
                             }
                         }
                         utils::hide_recording_overlay(&ah_clone);
@@ -1440,6 +1842,15 @@ impl ShortcutAction for TranscribeAction {
                             true,
                         );
                         emit_paste_failed_event(&ah, reason, copied_to_clipboard);
+                        if let Ok(mut p) = profiler.lock() {
+                            p.push_step_since(
+                                "paste_dispatch_wait",
+                                paste_time,
+                                Some("dispatch-failed".to_string()),
+                            );
+                            p.mark_error("PASTE_MAIN_THREAD_DISPATCH_FAILED");
+                            p.emit(&ah);
+                        }
                         utils::hide_recording_overlay(&ah);
                         change_tray_icon(&ah, TrayIconState::Idle);
                     });
@@ -1452,6 +1863,11 @@ impl ShortcutAction for TranscribeAction {
                         "Transcription produced empty output; paste skipped",
                         true,
                     );
+                    if let Ok(mut p) = profiler.lock() {
+                        p.set_transcription_chars("");
+                        p.mark_error("TRANSCRIPTION_EMPTY");
+                        p.emit(&ah);
+                    }
                     utils::hide_recording_overlay(&ah);
                     change_tray_icon(&ah, TrayIconState::Idle);
                 }
@@ -1465,6 +1881,17 @@ impl ShortcutAction for TranscribeAction {
                     } else {
                         None
                     };
+                    if let Ok(mut p) = profiler.lock() {
+                        p.push_step(
+                            "history_enqueue",
+                            Duration::from_millis(0),
+                            Some(format!(
+                                "chars={}, post_processed={}",
+                                transcription_for_history.chars().count(),
+                                post_processed_text.is_some()
+                            )),
+                        );
+                    }
                     tauri::async_runtime::spawn(async move {
                         if let Err(e) = hm_clone
                             .save_transcription(

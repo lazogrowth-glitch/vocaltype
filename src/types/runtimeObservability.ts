@@ -17,6 +17,21 @@ export type RuntimeErrorStage =
   | "system"
   | "unknown";
 
+export type AppContextCategory =
+  | "code"
+  | "email"
+  | "chat"
+  | "document"
+  | "browser"
+  | "unknown";
+
+export interface AppTranscriptionContext {
+  process_name?: string | null;
+  window_title?: string | null;
+  category: AppContextCategory;
+  detected_at_ms: number;
+}
+
 export interface LifecycleStateEvent {
   state: TranscriptionLifecycleState;
   binding_id?: string | null;
@@ -30,6 +45,114 @@ export interface RuntimeErrorEvent {
   message: string;
   recoverable: boolean;
   timestamp_ms: number;
+}
+
+export type PowerMode = "normal" | "saver" | "unknown";
+export type GpuKind = "none" | "integrated" | "dedicated" | "unknown";
+export type NpuKind = "none" | "qualcomm" | "intel" | "amd" | "unknown";
+export type CalibrationPhase = "none" | "quick" | "full";
+export type AdaptiveCalibrationState =
+  | "idle"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed"
+  | "fallback_applied";
+
+export interface MachineScoreDetails {
+  ram_score: number;
+  cpu_threads_score: number;
+  cpu_family_score: number;
+  gpu_prebench_bonus: number;
+  npu_prebench_bonus: number;
+  low_power_penalty: number;
+  power_penalty: number;
+  thermal_penalty: number;
+  final_score: number;
+  tier_reason: string;
+}
+
+export interface UnsafeBackendRecord {
+  backend: string;
+  unsafe_until_ms: number;
+  reason: string;
+  failed_at_ms: number;
+}
+
+export interface WhisperModelAdaptiveConfigSnapshot {
+  backend: string;
+  threads: number;
+  chunk_seconds: number;
+  overlap_ms: number;
+  active_backend: string;
+  active_threads: number;
+  active_chunk_seconds: number;
+  active_overlap_ms: number;
+  short_latency_ms: number;
+  medium_latency_ms: number;
+  long_latency_ms: number;
+  stability_score: number;
+  overall_score: number;
+  failure_count: number;
+  calibrated_phase: CalibrationPhase;
+  unsafe_backends: UnsafeBackendRecord[];
+  unsafe_until?: number | null;
+  last_failure_reason?: string | null;
+  last_failure_at?: number | null;
+  last_quick_bench_at?: number | null;
+  last_full_bench_at?: number | null;
+  backend_decision_reason?: string | null;
+  config_decision_reason?: string | null;
+}
+
+export interface AdaptiveMachineProfileSnapshot {
+  profile_schema_version: number;
+  app_version: string;
+  backend_version: string;
+  machine_score_details: MachineScoreDetails;
+  machine_tier: "low" | "medium" | "high";
+  cpu_brand: string;
+  logical_cores: number;
+  total_memory_gb: number;
+  low_power_cpu: boolean;
+  gpu_detected: boolean;
+  gpu_kind: GpuKind;
+  gpu_name?: string | null;
+  npu_detected: boolean;
+  npu_kind: NpuKind;
+  npu_name?: string | null;
+  copilot_plus_detected: boolean;
+  on_battery?: boolean | null;
+  power_mode: PowerMode;
+  thermal_degraded: boolean;
+  runtime_power_snapshot_at?: number | null;
+  recommended_model_id: string;
+  secondary_model_id?: string | null;
+  active_runtime_model_id?: string | null;
+  recommended_backend?: string | null;
+  active_backend?: string | null;
+  calibrated_models: string[];
+  bench_phase: "none" | "quick_done" | "full_done";
+  bench_completed_at?: number | null;
+  last_quick_bench_at?: number | null;
+  last_full_bench_at?: number | null;
+  calibration_state: AdaptiveCalibrationState;
+  calibration_reason?: string | null;
+  large_skip_reason?: string | null;
+  whisper: {
+    small: WhisperModelAdaptiveConfigSnapshot;
+    medium: WhisperModelAdaptiveConfigSnapshot;
+    turbo: WhisperModelAdaptiveConfigSnapshot;
+    large: WhisperModelAdaptiveConfigSnapshot;
+  };
+}
+
+export interface CalibrationStatusSnapshot {
+  model_id: string;
+  phase: CalibrationPhase;
+  state: AdaptiveCalibrationState;
+  detail?: string | null;
+  updated_at_ms: number;
 }
 
 export interface RuntimeDiagnosticsSnapshot {
@@ -49,4 +172,8 @@ export interface RuntimeDiagnosticsSnapshot {
   selected_output_device?: string | null;
   is_recording: boolean;
   is_paused: boolean;
+  current_app_context?: AppTranscriptionContext | null;
+  last_transcription_app_context?: AppTranscriptionContext | null;
+  adaptive_machine_profile?: AdaptiveMachineProfileSnapshot | null;
+  adaptive_calibration_state?: CalibrationStatusSnapshot[];
 }

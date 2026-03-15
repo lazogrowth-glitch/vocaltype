@@ -24,25 +24,31 @@
     "customModelDescription": "Not officially supported",
     "downloadFailed": "Download failed. Please try again.",
     "modelCard": {
-      "accuracy": "accuracy",
-      "speed": "speed"
+      "accuracy": "quality",
+      "speed": "speed class"
+    },
+    "hardware": {
+      "copilotPlusTitle": "Copilot+ PC detected",
+      "copilotPlusDescription": "This device exposes an NPU class associated with Copilot+ PCs. VocalType now tracks that capability in its adaptive profile.",
+      "npuTitle": "NPU detected",
+      "npuDescription": "This device exposes a neural processor. VocalType now includes it in machine detection and diagnostics."
     },
     "models": {
       "small": {
         "name": "Whisper Small",
-        "description": "Good lightweight offline model. Broad language support, but clearly behind Turbo and Large on accuracy."
+        "description": "Fastest Whisper option for weaker machines. Broad language support with a lighter footprint than the larger Whisper builds."
       },
       "medium": {
         "name": "Whisper Medium",
-        "description": "Solid multilingual model with better accuracy than Small, but not the best speed or quality tier."
+        "description": "Balanced multilingual Whisper choice. Usually a better quality-speed tradeoff than Turbo on weaker PCs."
       },
       "turbo": {
         "name": "Whisper Turbo",
-        "description": "Best default for most users. Strong multilingual quality with much better speed than Whisper Large."
+        "description": "Heavy Whisper v3 Turbo build. Strong quality, but real speed depends heavily on the machine and can feel slow on weaker PCs."
       },
       "large": {
         "name": "Whisper Large",
-        "description": "Highest offline quality in the app for difficult accents, noisy audio, and multilingual dictation. Slowest option."
+        "description": "Maximum offline accuracy. Heavy model best reserved for difficult audio, accents, or quality-first multilingual dictation."
       },
       "parakeet-tdt-0.6b-v2": {
         "name": "Parakeet V2",
@@ -54,11 +60,11 @@
       },
       "parakeet-tdt-0.6b-v3-english": {
         "name": "Parakeet V3 English",
-        "description": "English-first Parakeet profile. Full-context decoding (no segmentation) for top speed and stability in English."
+        "description": "Fast English-first Parakeet profile. Extremely responsive on weaker machines and tuned for longer English dictation."
       },
       "parakeet-tdt-0.6b-v3-multilingual": {
         "name": "Parakeet V3 Multilingual",
-        "description": "Multilingual experimental profile tuned for French and non-English dictation with short segmented decoding."
+        "description": "Fast multilingual Parakeet profile tuned for French and other non-English dictation with short segmented decoding."
       },
       "moonshine-base": {
         "name": "Moonshine Base",
@@ -123,7 +129,7 @@
       "experimental": "Experimental",
       "english": "English",
       "englishOnly": "English Only",
-      "multilingualExperimental": "Multilingual Experimental"
+      "multilingualExperimental": "Multilingual"
     },
     "custom": "Custom",
     "active": "Active",
@@ -221,7 +227,7 @@
     },
     "models": {
       "title": "Models",
-      "description": "Select a transcription model or download additional models. Different models offer varying levels of accuracy and speed.",
+      "description": "Select a transcription model or download additional models. Quality and speed are relative estimates and can vary a lot depending on hardware, backend, and recording length.",
       "tabs": {
         "transcription": "Transcription",
         "processing": "Processing"
@@ -238,6 +244,12 @@
         "multiLanguage": "Multi-language",
         "translation": "Translation",
         "allLanguages": "All Languages"
+      },
+      "hardware": {
+        "copilotPlusTitle": "Copilot+ PC detected",
+        "copilotPlusDescription": "VocalType now keeps that capability in the adaptive profile, but true NPU execution still depends on the model runtime.",
+        "npuTitle": "NPU detected",
+        "npuDescription": "This machine exposes a neural processor. VocalType now shows it in diagnostics and hardware profiling."
       },
       "noModelsMatch": "No models match this filter.",
       "processingModels": {

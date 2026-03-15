@@ -83,6 +83,17 @@ pub struct ModelManager {
 }
 
 impl ModelManager {
+    fn recommended_model_ids_from_settings(settings: &crate::settings::AppSettings) -> Vec<String> {
+        let mut ids = Vec::new();
+        if let Some(profile) = settings.adaptive_machine_profile.as_ref() {
+            ids.push(profile.recommended_model_id.clone());
+            if let Some(secondary) = profile.secondary_model_id.as_ref() {
+                ids.push(secondary.clone());
+            }
+        }
+        ids
+    }
+
     fn required_files_for_directory_model(
         model_id: &str,
     ) -> Option<&'static [(&'static str, u64)]> {
@@ -175,7 +186,7 @@ impl ModelManager {
             ModelInfo {
                 id: "small".to_string(),
                 name: "Whisper Small".to_string(),
-                description: "Good lightweight offline model. Broad language support, but clearly behind Turbo and Large on accuracy."
+                description: "Fastest Whisper option for weaker machines. Broad language support with a lighter footprint than the larger Whisper builds."
                     .to_string(),
                 filename: "ggml-small.bin".to_string(),
                 url: Some(format!("{}/ggml-small.bin", MODEL_ASSET_BASE_URL)),
@@ -185,8 +196,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.80,
-                speed_score: 0.84,
+                accuracy_score: 0.79,
+                speed_score: 0.83,
                 supports_translation: true,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -200,7 +211,7 @@ impl ModelManager {
             ModelInfo {
                 id: "medium".to_string(),
                 name: "Whisper Medium".to_string(),
-                description: "Good multilingual accuracy with reasonable speed. A solid middle ground between Small and Turbo."
+                description: "Balanced multilingual Whisper choice. Usually a better quality-speed tradeoff than Turbo on weaker PCs."
                     .to_string(),
                 filename: "whisper-medium-q4_1.bin".to_string(),
                 url: Some(format!("{}/whisper-medium-q4_1.bin", MODEL_ASSET_BASE_URL)),
@@ -210,8 +221,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.86,
-                speed_score: 0.74,
+                accuracy_score: 0.85,
+                speed_score: 0.67,
                 supports_translation: true,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -225,7 +236,7 @@ impl ModelManager {
                 id: "turbo".to_string(),
                 name: "Whisper Turbo".to_string(),
                 description:
-                    "Best default for most users. Near-Large accuracy at 3x the speed. Excellent for French, English, and 97 other languages."
+                    "Heavy Whisper v3 Turbo build. Strong quality, but real speed depends heavily on the machine and can feel slow on weaker PCs."
                         .to_string(),
                 filename: "ggml-large-v3-turbo.bin".to_string(),
                 url: Some(format!("{}/ggml-large-v3-turbo.bin", MODEL_ASSET_BASE_URL)),
@@ -235,10 +246,10 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.93,
-                speed_score: 0.78,
+                accuracy_score: 0.90,
+                speed_score: 0.46,
                 supports_translation: false, // Turbo doesn't support translation
-                is_recommended: true,
+                is_recommended: false,
                 supported_languages: whisper_languages.clone(),
                 is_custom: false,
             },
@@ -250,7 +261,7 @@ impl ModelManager {
                 id: "large".to_string(),
                 name: "Whisper Large v3".to_string(),
                 description:
-                    "Maximum offline accuracy. Best for difficult accents, noisy audio, and demanding multilingual dictation."
+                    "Maximum offline accuracy. Heavy model best reserved for difficult audio, accents, or quality-first multilingual dictation."
                         .to_string(),
                 filename: "ggml-large-v3-q5_0.bin".to_string(),
                 url: Some(format!("{}/ggml-large-v3-q5_0.bin", MODEL_ASSET_BASE_URL)),
@@ -260,8 +271,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.96,
-                speed_score: 0.52,
+                accuracy_score: 0.95,
+                speed_score: 0.34,
                 supports_translation: true,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -285,8 +296,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: false,
                 engine_type: EngineType::Whisper,
-                accuracy_score: 0.90,
-                speed_score: 0.52,
+                accuracy_score: 0.89,
+                speed_score: 0.45,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: whisper_languages.clone(),
@@ -311,8 +322,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::Parakeet,
-                accuracy_score: 0.87,
-                speed_score: 0.92,
+                accuracy_score: 0.85,
+                speed_score: 0.95,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -336,7 +347,7 @@ impl ModelManager {
                 id: PARAKEET_V3_ENGLISH_ID.to_string(),
                 name: "Parakeet V3 English".to_string(),
                 description:
-                    "English-first Parakeet profile. Fastest option for English dictation with full-context decoding (no segmentation)."
+                    "Fastest English-first profile in the app. Tuned for very high speed while keeping longer English dictation usable."
                         .to_string(),
                 filename: "parakeet-tdt-0.6b-v3-int8".to_string(),
                 url: Some(format!("{}/parakeet-v3-int8.tar.gz", MODEL_ASSET_BASE_URL)),
@@ -347,7 +358,7 @@ impl ModelManager {
                 is_directory: true,
                 engine_type: EngineType::Parakeet,
                 accuracy_score: 0.88,
-                speed_score: 0.90,
+                speed_score: 0.99,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -361,7 +372,7 @@ impl ModelManager {
                 id: PARAKEET_V3_MULTILINGUAL_ID.to_string(),
                 name: "Parakeet V3 Multilingual".to_string(),
                 description:
-                    "Multilingual experimental Parakeet profile tuned for non-English dictation with short segmented decoding."
+                    "Fast multilingual Parakeet profile tuned for French and other non-English dictation with short segmented decoding."
                         .to_string(),
                 filename: "parakeet-tdt-0.6b-v3-int8".to_string(),
                 url: Some(format!("{}/parakeet-v3-int8.tar.gz", MODEL_ASSET_BASE_URL)),
@@ -371,10 +382,10 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::Parakeet,
-                accuracy_score: 0.82,
-                speed_score: 0.84,
+                accuracy_score: 0.89,
+                speed_score: 0.97,
                 supports_translation: false,
-                is_recommended: false,
+                is_recommended: true,
                 supported_languages: parakeet_v3_languages.clone(),
                 is_custom: false,
             },
@@ -423,8 +434,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::Moonshine,
-                accuracy_score: 0.76,
-                speed_score: 0.93,
+                accuracy_score: 0.72,
+                speed_score: 0.90,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -451,8 +462,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::MoonshineStreaming,
-                accuracy_score: 0.72,
-                speed_score: 0.98,
+                accuracy_score: 0.66,
+                speed_score: 0.99,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -479,8 +490,8 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::MoonshineStreaming,
-                accuracy_score: 0.78,
-                speed_score: 0.94,
+                accuracy_score: 0.74,
+                speed_score: 0.95,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: vec!["en".to_string()],
@@ -507,7 +518,7 @@ impl ModelManager {
                 partial_size: 0,
                 is_directory: true,
                 engine_type: EngineType::MoonshineStreaming,
-                accuracy_score: 0.82,
+                accuracy_score: 0.80,
                 speed_score: 0.90,
                 supports_translation: false,
                 is_recommended: false,
@@ -540,7 +551,7 @@ impl ModelManager {
                 is_directory: true,
                 engine_type: EngineType::SenseVoice,
                 accuracy_score: 0.88,
-                speed_score: 0.91,
+                speed_score: 0.86,
                 supports_translation: false,
                 is_recommended: false,
                 supported_languages: sense_voice_languages,
@@ -599,11 +610,17 @@ impl ModelManager {
     }
 
     pub fn get_available_models(&self) -> Vec<ModelInfo> {
+        let settings = get_settings(&self.app_handle);
+        let recommended_ids = Self::recommended_model_ids_from_settings(&settings);
         let models = self.available_models.lock().unwrap();
         models
             .values()
             .filter(|m| m.id != PARAKEET_V3_LEGACY_ID)
             .cloned()
+            .map(|mut model| {
+                model.is_recommended = recommended_ids.iter().any(|id| id == &model.id);
+                model
+            })
             .collect()
     }
 
@@ -737,11 +754,20 @@ impl ModelManager {
         // Gemini is cloud-only and should not be auto-selected.
         if settings.selected_model.is_empty() {
             let models = self.available_models.lock().unwrap();
-            if let Some(available_model) = models.values().find(|model| {
-                model.id != PARAKEET_V3_LEGACY_ID
-                    && model.is_downloaded
-                    && !matches!(model.engine_type, EngineType::GeminiApi)
-            }) {
+            let recommended_ids = Self::recommended_model_ids_from_settings(&settings);
+            let available_model = recommended_ids
+                .iter()
+                .find_map(|id| models.get(id))
+                .filter(|model| model.is_downloaded)
+                .or_else(|| {
+                    models.values().find(|model| {
+                        model.id != PARAKEET_V3_LEGACY_ID
+                            && model.is_downloaded
+                            && !matches!(model.engine_type, EngineType::GeminiApi)
+                    })
+                });
+
+            if let Some(available_model) = available_model {
                 info!(
                     "Auto-selecting model: {} ({})",
                     available_model.id, available_model.name

@@ -1,3 +1,4 @@
+use crate::adaptive_runtime::maybe_schedule_whisper_calibration;
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::model::{EngineType, ModelInfo, ModelManager};
 use crate::managers::transcription::TranscriptionManager;
@@ -26,13 +27,17 @@ pub async fn get_model_info(
 #[tauri::command]
 #[specta::specta]
 pub async fn download_model(
+    app_handle: AppHandle,
     model_manager: State<'_, Arc<ModelManager>>,
     model_id: String,
 ) -> Result<(), String> {
     model_manager
         .download_model(&model_id)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    maybe_schedule_whisper_calibration(&app_handle, model_manager.inner().clone(), &model_id);
+    Ok(())
 }
 
 #[tauri::command]

@@ -28,6 +28,7 @@ use crate::settings::{
     APPLE_INTELLIGENCE_PROVIDER_ID,
 };
 use crate::tray;
+use crate::vocabulary_store::VocabularyStoreState;
 
 // Note: Commands are accessed via shortcut::handy_keys:: in lib.rs
 
@@ -695,6 +696,14 @@ pub fn change_start_hidden_setting(app: AppHandle, enabled: bool) -> Result<(), 
 #[tauri::command]
 #[specta::specta]
 pub fn change_autostart_setting(app: AppHandle, enabled: bool) -> Result<(), String> {
+    #[cfg(debug_assertions)]
+    if enabled {
+        return Err(
+            "Autostart is disabled in development builds. Use an installed release build to enable it."
+                .to_string(),
+        );
+    }
+
     let mut settings = settings::get_settings(&app);
     settings.autostart_enabled = enabled;
     settings::write_settings(&app, settings);
@@ -741,7 +750,48 @@ pub fn change_update_checks_setting(app: AppHandle, enabled: bool) -> Result<(),
 #[specta::specta]
 pub fn update_custom_words(app: AppHandle, words: Vec<String>) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
+    let previous_words = settings.custom_words.clone();
     settings.custom_words = words;
+    let adaptive_enabled = settings.adaptive_vocabulary_enabled;
+    let added_words: Vec<String> = settings
+        .custom_words
+        .iter()
+        .filter(|word| !previous_words.iter().any(|existing| existing == *word))
+        .cloned()
+        .collect();
+    settings::write_settings(&app, settings);
+
+    if adaptive_enabled && !added_words.is_empty() {
+        let context = if let Some(state) =
+            app.try_state::<crate::context_detector::ActiveAppContextState>()
+        {
+            if let Ok(snapshot) = state.0.lock() {
+                snapshot.last_transcription_context()
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        if let Some(vocabulary_state) = app.try_state::<VocabularyStoreState>() {
+            if let Ok(mut vocabulary_store) = vocabulary_state.0.lock() {
+                vocabulary_store.learn_terms(context.as_ref(), added_words);
+                vocabulary_store.save(&app);
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn change_adaptive_vocabulary_enabled_setting(
+    app: AppHandle,
+    enabled: bool,
+) -> Result<(), String> {
+    let mut settings = settings::get_settings(&app);
+    settings.adaptive_vocabulary_enabled = enabled;
     settings::write_settings(&app, settings);
     Ok(())
 }

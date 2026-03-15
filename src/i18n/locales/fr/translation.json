@@ -24,25 +24,31 @@
     "customModelDescription": "Non officiellement pris en charge",
     "downloadFailed": "Échec du téléchargement. Veuillez réessayer.",
     "modelCard": {
-      "accuracy": "précision",
-      "speed": "vitesse"
+      "accuracy": "qualité",
+      "speed": "profil vitesse"
+    },
+    "hardware": {
+      "copilotPlusTitle": "PC Copilot+ détecté",
+      "copilotPlusDescription": "Cet appareil expose une classe de NPU associée aux Copilot+ PC. VocalType suit maintenant cette capacité dans son profil adaptatif.",
+      "npuTitle": "NPU détecté",
+      "npuDescription": "Cet appareil expose un processeur neuronal. VocalType l'intègre maintenant dans la détection machine et les diagnostics."
     },
     "models": {
       "small": {
         "name": "Whisper Small",
-        "description": "Bon modèle hors ligne léger. Large prise en charge des langues, mais nettement derrière Turbo et Large en précision."
+        "description": "L'option Whisper la plus rapide pour les petites machines. Large prise en charge des langues avec une empreinte plus légère que les gros Whisper."
       },
       "medium": {
         "name": "Whisper Medium",
-        "description": "Modèle multilingue solide, plus précis que Small, sans être le meilleur en vitesse ni en qualité."
+        "description": "Choix Whisper multilingue équilibré. Souvent un meilleur compromis qualité-vitesse que Turbo sur les PC faibles."
       },
       "turbo": {
         "name": "Whisper Turbo",
-        "description": "Meilleur choix par défaut pour la plupart des utilisateurs. Très bon en multilingue avec une vitesse bien meilleure que Whisper Large."
+        "description": "Gros build Whisper v3 Turbo. La qualité reste forte, mais sa vitesse réelle dépend beaucoup de la machine et peut devenir lente sur un PC faible."
       },
       "large": {
         "name": "Whisper Large",
-        "description": "Meilleure qualité hors ligne de l'application pour les accents difficiles, le bruit et la dictée multilingue. Le plus lent."
+        "description": "Précision hors ligne maximale. Modèle lourd à réserver aux audios difficiles, aux accents marqués ou à la dictée multilingue orientée qualité."
       },
       "parakeet-tdt-0.6b-v2": {
         "name": "Parakeet V2",
@@ -54,11 +60,11 @@
       },
       "parakeet-tdt-0.6b-v3-english": {
         "name": "Parakeet V3 Anglais",
-        "description": "Profil Parakeet orienté anglais. Décodage en contexte complet (sans segmentation) pour une vitesse et une stabilité maximales en anglais."
+        "description": "Profil Parakeet très rapide orienté anglais. Excellent sur les petites machines et réglé pour mieux tenir les dictées anglaises longues."
       },
       "parakeet-tdt-0.6b-v3-multilingual": {
         "name": "Parakeet V3 Multilingue",
-        "description": "Profil multilingue expérimental optimisé pour la dictée en français et autres langues non anglaises avec segmentation courte."
+        "description": "Profil Parakeet multilingue rapide, optimisé pour la dictée en français et dans d'autres langues non anglaises avec segmentation courte."
       },
       "moonshine-base": {
         "name": "Moonshine Base",
@@ -123,7 +129,7 @@
       "experimental": "Expérimental",
       "english": "Anglais",
       "englishOnly": "Anglais uniquement",
-      "multilingualExperimental": "Multilingue expérimental"
+      "multilingualExperimental": "Multilingue"
     },
     "custom": "Personnalisé",
     "active": "Actif",
@@ -170,7 +176,7 @@
     },
     "models": {
       "title": "Modèles de Transcription",
-      "description": "Sélectionnez un modèle de transcription ou téléchargez des modèles supplémentaires. Différents modèles offrent différents niveaux de précision et de vitesse.",
+      "description": "Sélectionnez un modèle de transcription ou téléchargez des modèles supplémentaires. Les niveaux de qualité et de vitesse restent des estimations relatives qui peuvent beaucoup varier selon la machine, le backend et la durée du vocal.",
       "downloaded": "Téléchargés",
       "available": "Disponibles au Téléchargement",
       "tabs": {
@@ -200,6 +206,12 @@
         "multiLanguage": "Multilingue",
         "translation": "Traduction",
         "allLanguages": "Toutes les langues"
+      },
+      "hardware": {
+        "copilotPlusTitle": "PC Copilot+ détecté",
+        "copilotPlusDescription": "VocalType conserve maintenant cette capacité dans le profil adaptatif, mais l'exécution NPU réelle dépend encore du runtime du modèle.",
+        "npuTitle": "NPU détecté",
+        "npuDescription": "Cette machine expose un processeur neuronal. VocalType l'affiche maintenant dans les diagnostics et le profil matériel."
       },
       "noModelsMatch": "Aucun modèle ne correspond à ce filtre.",
       "yourModels": "Modèles téléchargés",
