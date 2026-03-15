@@ -213,6 +213,8 @@ where
                                 start: word.start,
                                 end: word.end,
                                 text: word.word,
+                                confidence: None,
+                                words: None,
                             })
                             .collect(),
                     ),
@@ -225,6 +227,8 @@ where
                                 start: segment.start,
                                 end: segment.end,
                                 text: segment.text,
+                                confidence: None,
+                                words: None,
                             })
                             .collect(),
                     ),

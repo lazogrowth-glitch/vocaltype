@@ -1,4 +1,7 @@
-use crate::adaptive_runtime::{get_calibration_states, CalibrationStatusSnapshot};
+use crate::adaptive_runtime::{
+    derive_machine_status, get_calibration_states, CalibrationStatusSnapshot,
+    MachineStatusSnapshot,
+};
 use crate::context_detector::{detect_current_app_context, ActiveAppContextState, AppTranscriptionContext};
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::transcription::TranscriptionManager;
@@ -101,6 +104,7 @@ pub struct RuntimeDiagnostics {
     pub adaptive_voice_profile_enabled: bool,
     pub adaptive_voice_profile: Option<VoiceProfile>,
     pub active_voice_runtime_adjustment: Option<VoiceRuntimeAdjustment>,
+    pub machine_status: Option<MachineStatusSnapshot>,
     pub recent_pipeline_profiles: Vec<PipelineProfileEvent>,
     pub adaptive_machine_profile: Option<AdaptiveMachineProfile>,
     pub adaptive_calibration_state: Vec<CalibrationStatusSnapshot>,
@@ -294,6 +298,13 @@ pub fn collect_runtime_diagnostics(app: &AppHandle) -> RuntimeDiagnostics {
             )
         };
 
+    let adaptive_calibration_state = get_calibration_states();
+    let machine_status = derive_machine_status(
+        settings.adaptive_machine_profile.as_ref(),
+        &adaptive_calibration_state,
+        tm.get_current_model().as_deref(),
+    );
+
     RuntimeDiagnostics {
         captured_at_ms: now_ms(),
         app_version: app.package_info().version.to_string(),
@@ -319,9 +330,10 @@ pub fn collect_runtime_diagnostics(app: &AppHandle) -> RuntimeDiagnostics {
         adaptive_voice_profile_enabled,
         adaptive_voice_profile,
         active_voice_runtime_adjustment,
+        machine_status,
         recent_pipeline_profiles,
         adaptive_machine_profile: settings.adaptive_machine_profile,
-        adaptive_calibration_state: get_calibration_states(),
+        adaptive_calibration_state,
     }
 }
 

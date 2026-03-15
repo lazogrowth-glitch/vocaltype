@@ -60,11 +60,11 @@
       },
       "parakeet-tdt-0.6b-v3-english": {
         "name": "Parakeet V3 Anglais",
-        "description": "Profil Parakeet très rapide orienté anglais. Excellent sur les petites machines et réglé pour mieux tenir les dictées anglaises longues."
+        "description": "Profil Parakeet très rapide orienté anglais. Excellent sur les petites machines, avec un chemin NPU sur les Copilot+ compatibles."
       },
       "parakeet-tdt-0.6b-v3-multilingual": {
         "name": "Parakeet V3 Multilingue",
-        "description": "Profil Parakeet multilingue rapide, optimisé pour la dictée en français et dans d'autres langues non anglaises avec segmentation courte."
+        "description": "Profil Parakeet multilingue rapide, optimisé pour la dictée en français et dans d'autres langues non anglaises, avec un chemin NPU sur les Copilot+ compatibles."
       },
       "moonshine-base": {
         "name": "Moonshine Base",

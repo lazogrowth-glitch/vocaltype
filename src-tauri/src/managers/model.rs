@@ -347,7 +347,7 @@ impl ModelManager {
                 id: PARAKEET_V3_ENGLISH_ID.to_string(),
                 name: "Parakeet V3 English".to_string(),
                 description:
-                    "Fastest English-first profile in the app. Tuned for very high speed while keeping longer English dictation usable."
+                    "Fastest English-first profile in the app. Tuned for very high speed, with an NPU-friendly path on supported Copilot+ style PCs."
                         .to_string(),
                 filename: "parakeet-tdt-0.6b-v3-int8".to_string(),
                 url: Some(format!("{}/parakeet-v3-int8.tar.gz", MODEL_ASSET_BASE_URL)),
@@ -372,7 +372,7 @@ impl ModelManager {
                 id: PARAKEET_V3_MULTILINGUAL_ID.to_string(),
                 name: "Parakeet V3 Multilingual".to_string(),
                 description:
-                    "Fast multilingual Parakeet profile tuned for French and other non-English dictation with short segmented decoding."
+                    "Fast multilingual Parakeet profile tuned for French and other non-English dictation, with an NPU-friendly path on supported Copilot+ style PCs."
                         .to_string(),
                 filename: "parakeet-tdt-0.6b-v3-int8".to_string(),
                 url: Some(format!("{}/parakeet-v3-int8.tar.gz", MODEL_ASSET_BASE_URL)),

@@ -46,7 +46,17 @@ const getLanguageDisplayText = (
 const getProductBadges = (
   model: ModelInfo,
   t: (key: string, options?: Record<string, unknown>) => string,
+  copilotOptimized: boolean,
 ): ProductBadge[] => {
+  const hardwareBadges: ProductBadge[] = copilotOptimized
+    ? [
+        {
+          label: "Optimized Copilot+",
+          variant: "success",
+        },
+      ]
+    : [];
+
   if (model.id === "parakeet-tdt-0.6b-v3-multilingual") {
     return [
       {
@@ -61,6 +71,7 @@ const getProductBadges = (
         }),
         variant: "secondary",
       },
+      ...hardwareBadges,
     ];
   }
 
@@ -94,6 +105,7 @@ const getProductBadges = (
         }),
         variant: "speed",
       },
+      ...hardwareBadges,
     ];
   }
 
@@ -130,6 +142,7 @@ interface ModelCardProps {
   downloadProgress?: number;
   downloadSpeed?: number; // MB/s
   showRecommended?: boolean;
+  copilotOptimized?: boolean;
 }
 
 const ModelCard: React.FC<ModelCardProps> = ({
@@ -145,6 +158,7 @@ const ModelCard: React.FC<ModelCardProps> = ({
   downloadProgress,
   downloadSpeed,
   showRecommended = true,
+  copilotOptimized = false,
 }) => {
   const { t } = useTranslation();
   const isFeatured = variant === "featured";
@@ -154,7 +168,7 @@ const ModelCard: React.FC<ModelCardProps> = ({
   // Get translated model name and description
   const displayName = getTranslatedModelName(model, t);
   const displayDescription = getTranslatedModelDescription(model, t);
-  const productBadges = getProductBadges(model, t);
+  const productBadges = getProductBadges(model, t, copilotOptimized);
 
   const baseClasses =
     "flex flex-col rounded-xl px-4 py-3 gap-2 text-left transition-all duration-200";

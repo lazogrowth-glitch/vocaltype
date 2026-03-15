@@ -79,11 +79,18 @@ pub struct TranscriptionResult {
     pub segments: Option<Vec<TranscriptionSegment>>,
 }
 
+/// A confidence-scored word reconstructed from engine tokens.
+#[derive(Debug, Clone)]
+pub struct TranscriptionWord {
+    pub text: String,
+    pub confidence: f32,
+}
+
 /// A single transcribed segment with timing information.
 ///
 /// Represents a portion of the transcribed audio with start and end timestamps
 /// and the corresponding text content.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TranscriptionSegment {
     /// Start time of the segment in seconds
     pub start: f32,
@@ -91,6 +98,10 @@ pub struct TranscriptionSegment {
     pub end: f32,
     /// The transcribed text for this segment
     pub text: String,
+    /// Optional average confidence for the segment, when supported by the engine.
+    pub confidence: Option<f32>,
+    /// Optional word-level confidences, when supported by the engine.
+    pub words: Option<Vec<TranscriptionWord>>,
 }
 
 /// Common interface for speech transcription engines.

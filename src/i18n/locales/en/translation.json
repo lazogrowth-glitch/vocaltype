@@ -60,11 +60,11 @@
       },
       "parakeet-tdt-0.6b-v3-english": {
         "name": "Parakeet V3 English",
-        "description": "Fast English-first Parakeet profile. Extremely responsive on weaker machines and tuned for longer English dictation."
+        "description": "Fast English-first Parakeet profile. Extremely responsive on weaker machines, with an NPU-friendly path on supported Copilot+ PCs."
       },
       "parakeet-tdt-0.6b-v3-multilingual": {
         "name": "Parakeet V3 Multilingual",
-        "description": "Fast multilingual Parakeet profile tuned for French and other non-English dictation with short segmented decoding."
+        "description": "Fast multilingual Parakeet profile tuned for French and other non-English dictation, with an NPU-friendly path on supported Copilot+ PCs."
       },
       "moonshine-base": {
         "name": "Moonshine Base",

@@ -12,6 +12,7 @@ import "./App.css";
 import { AuthPortal } from "./components/auth/AuthPortal";
 import AccessibilityPermissions from "./components/AccessibilityPermissions";
 import Footer from "./components/footer";
+import { MachineStatusBar } from "./components/MachineStatusBar";
 import Onboarding, { AccessibilityOnboarding } from "./components/onboarding";
 import { Sidebar, SidebarSection, SECTIONS_CONFIG } from "./components/Sidebar";
 import { useSettings } from "./hooks/useSettings";
@@ -455,6 +456,7 @@ function App() {
         />
         {/* Scrollable content area */}
         <div className="flex-1 flex flex-col overflow-hidden">
+          <MachineStatusBar />
           <div className="flex-1 overflow-y-auto">
             <div className="flex flex-col items-center p-4 gap-4">
               <AccessibilityPermissions />

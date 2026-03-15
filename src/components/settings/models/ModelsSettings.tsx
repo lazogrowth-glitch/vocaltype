@@ -309,6 +309,23 @@ interface AdaptiveProfileSnapshot {
   copilot_plus_detected?: boolean;
 }
 
+const isCopilotOptimizedParakeet = (
+  profile: AdaptiveProfileSnapshot | null,
+  modelId: string,
+): boolean => {
+  if (
+    modelId !== "parakeet-tdt-0.6b-v3-english" &&
+    modelId !== "parakeet-tdt-0.6b-v3-multilingual"
+  ) {
+    return false;
+  }
+
+  return (
+    !!profile?.npu_detected &&
+    (profile.npu_kind === "qualcomm" || profile.npu_kind === "intel")
+  );
+};
+
 export const ModelsSettings: React.FC = () => {
   const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState<ModelsTab>("transcription");
@@ -562,7 +579,10 @@ export const ModelsSettings: React.FC = () => {
         id: "fast",
         label: t("settings.models.modes.fast", { defaultValue: "Rapide" }),
         description: t("settings.models.modes.fastDescription", {
-          defaultValue: "Lowest latency for quick dictation",
+          defaultValue:
+            isCopilotOptimizedParakeet(adaptiveProfile, rapidId)
+              ? "Lowest latency with the NPU path on this PC"
+              : "Lowest latency for quick dictation",
         }),
         modelId: rapidId,
       },
@@ -796,6 +816,10 @@ export const ModelsSettings: React.FC = () => {
                 downloadProgress={getDownloadProgress(model.id)}
                 downloadSpeed={getDownloadSpeed(model.id)}
                 showRecommended={true}
+                copilotOptimized={isCopilotOptimizedParakeet(
+                  adaptiveProfile,
+                  model.id,
+                )}
               />
             ))}
           </div>
@@ -818,6 +842,10 @@ export const ModelsSettings: React.FC = () => {
                   downloadProgress={getDownloadProgress(model.id)}
                   downloadSpeed={getDownloadSpeed(model.id)}
                   showRecommended={true}
+                  copilotOptimized={isCopilotOptimizedParakeet(
+                    adaptiveProfile,
+                    model.id,
+                  )}
                 />
               ))}
             </div>

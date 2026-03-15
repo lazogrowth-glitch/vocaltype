@@ -41,6 +41,28 @@ pub struct CalibrationStatusSnapshot {
     pub updated_at_ms: u64,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum MachineStatusMode {
+    Optimal,
+    Battery,
+    Saver,
+    Thermal,
+    MemoryLimited,
+    Fallback,
+    Calibrating,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+pub struct MachineStatusSnapshot {
+    pub mode: MachineStatusMode,
+    pub degraded: bool,
+    pub headline: String,
+    pub detail: String,
+    pub active_model_id: Option<String>,
+    pub active_backend: Option<WhisperBackendPreference>,
+}
+
 #[derive(Debug, Clone, Copy)]
 struct CandidateConfig {
     backend: WhisperBackendPreference,
@@ -95,6 +117,116 @@ pub fn get_calibration_states() -> Vec<CalibrationStatusSnapshot> {
         .values()
         .cloned()
         .collect()
+}
+
+pub fn derive_machine_status(
+    profile: Option<&AdaptiveMachineProfile>,
+    calibration_states: &[CalibrationStatusSnapshot],
+    loaded_model_id: Option<&str>,
+) -> Option<MachineStatusSnapshot> {
+    let profile = profile?;
+    let active_model_id = loaded_model_id
+        .map(ToString::to_string)
+        .or_else(|| profile.active_runtime_model_id.clone())
+        .or_else(|| Some(profile.recommended_model_id.clone()));
+    let active_backend = profile.active_backend;
+    let active_model = active_model_id
+        .clone()
+        .unwrap_or_else(|| profile.recommended_model_id.clone());
+
+    let calibration_running = calibration_states.iter().any(|state| {
+        matches!(
+            state.state,
+            AdaptiveCalibrationState::Queued | AdaptiveCalibrationState::Running
+        )
+    });
+
+    if profile.thermal_degraded {
+        return Some(MachineStatusSnapshot {
+            mode: MachineStatusMode::Thermal,
+            degraded: true,
+            headline: "CPU hot".to_string(),
+            detail: "Transcription may be slower until the machine cools down.".to_string(),
+            active_model_id,
+            active_backend,
+        });
+    }
+
+    if matches!(profile.power_mode, PowerMode::Saver) {
+        return Some(MachineStatusSnapshot {
+            mode: MachineStatusMode::Saver,
+            degraded: true,
+            headline: "Power saver active".to_string(),
+            detail: format!("{active_model} is running with a reduced performance profile."),
+            active_model_id,
+            active_backend,
+        });
+    }
+
+    if profile.on_battery == Some(true) {
+        return Some(MachineStatusSnapshot {
+            mode: MachineStatusMode::Battery,
+            degraded: true,
+            headline: "Battery mode".to_string(),
+            detail: format!(
+                "{} is active. Plug in for the best Whisper/Turbo performance.",
+                active_model
+            ),
+            active_model_id,
+            active_backend,
+        });
+    }
+
+    if active_model == "small" && profile.total_memory_gb < 12 {
+        return Some(MachineStatusSnapshot {
+            mode: MachineStatusMode::MemoryLimited,
+            degraded: true,
+            headline: "Memory limited".to_string(),
+            detail: "A lighter model is preferred on this machine to stay responsive.".to_string(),
+            active_model_id,
+            active_backend,
+        });
+    }
+
+    if profile.active_runtime_model_id.as_deref() != Some(profile.recommended_model_id.as_str()) {
+        return Some(MachineStatusSnapshot {
+            mode: MachineStatusMode::Fallback,
+            degraded: true,
+            headline: "Fallback active".to_string(),
+            detail: format!(
+                "{} is running instead of {} for stability on this machine.",
+                active_model, profile.recommended_model_id
+            ),
+            active_model_id,
+            active_backend,
+        });
+    }
+
+    if calibration_running {
+        return Some(MachineStatusSnapshot {
+            mode: MachineStatusMode::Calibrating,
+            degraded: false,
+            headline: "Optimizing machine profile".to_string(),
+            detail: "Background calibration is refining speed and backend choices.".to_string(),
+            active_model_id,
+            active_backend,
+        });
+    }
+
+    Some(MachineStatusSnapshot {
+        mode: MachineStatusMode::Optimal,
+        degraded: false,
+        headline: "Optimal".to_string(),
+        detail: format!(
+            "{} is active{}.",
+            active_model,
+            active_backend
+                .map(|backend| format!(" with {:?} backend", backend))
+                .unwrap_or_default()
+        ),
+        active_model_id,
+        active_backend,
+    })
 }
 
 fn should_calibrate_model(model_id: &str) -> bool {

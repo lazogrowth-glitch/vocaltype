@@ -339,6 +339,7 @@ mod tests {
             post_process_prompt: None,
             post_process_action_key: None,
             model_name: None,
+            confidence_payload: None,
         }
     }
 

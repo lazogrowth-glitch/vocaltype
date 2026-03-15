@@ -271,6 +271,18 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
             })}
             : {new Date(snapshot.captured_at_ms).toLocaleString(i18n.language)}
           </p>
+          {snapshot.machine_status && (
+            <p>
+              {t("settings.debug.runtimeDiagnostics.machineStatus", {
+                defaultValue: "Machine status",
+              })}
+              :{" "}
+              <span className="font-semibold">
+                {snapshot.machine_status.headline}
+              </span>
+              {` · ${snapshot.machine_status.detail}`}
+            </p>
+          )}
           {snapshot.current_app_context && (
             <p>
               {t("settings.debug.runtimeDiagnostics.currentAppContext", {

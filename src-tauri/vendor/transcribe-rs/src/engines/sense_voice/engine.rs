@@ -189,6 +189,8 @@ impl TranscriptionEngine for SenseVoiceEngine {
                     start,
                     end,
                     text: token.clone(),
+                    confidence: None,
+                    words: None,
                 });
             }
             Some(segs)

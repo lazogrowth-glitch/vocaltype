@@ -19,6 +19,7 @@ import { commands, type HistoryEntry } from "@/bindings";
 import { formatDateTime } from "@/utils/dateFormat";
 import { useOsType } from "@/hooks/useOsType";
 import { useModelStore } from "@/stores/modelStore";
+import { ConfidenceText } from "./ConfidenceText";
 
 interface OpenRecordingsButtonProps {
   onClick: () => void;
@@ -418,15 +419,19 @@ const HistoryEntryComponent: React.FC<HistoryEntryProps> = ({
             <span className="text-xs font-medium text-text/50 mb-0.5 block">
               {t("settings.history.originalTranscript")}
             </span>
-            <p className="italic text-text/50 text-sm select-text cursor-text">
-              {entry.transcription_text}
-            </p>
+            <ConfidenceText
+              text={entry.transcription_text}
+              confidencePayload={entry.confidence_payload}
+              className="italic text-text/50 text-sm select-text cursor-text"
+            />
           </div>
         </div>
       ) : (
-        <p className="italic text-text/90 text-sm pb-2 select-text cursor-text">
-          {entry.transcription_text}
-        </p>
+        <ConfidenceText
+          text={entry.transcription_text}
+          confidencePayload={entry.confidence_payload}
+          className="italic text-text/90 text-sm pb-2 select-text cursor-text"
+        />
       )}
       <AudioPlayer onLoadRequest={handleLoadAudio} className="w-full" />
     </div>

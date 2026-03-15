@@ -100,13 +100,22 @@ pub async fn reprocess_history_entry(
         .load_model(&model_id)
         .map_err(|e| e.to_string())?;
 
-    let new_text = transcription_manager
-        .transcribe(samples)
+    let transcription_output = transcription_manager
+        .transcribe_detailed_request(crate::managers::transcription::TranscriptionRequest {
+            audio: samples,
+            app_context: None,
+        })
         .map_err(|e| e.to_string())?;
+    let new_text = transcription_output.text;
 
     let model_name = transcription_manager.get_current_model_name();
     history_manager
-        .update_transcription_text(id, &new_text, model_name.as_deref())
+        .update_transcription_text(
+            id,
+            &new_text,
+            transcription_output.confidence_payload.as_ref(),
+            model_name.as_deref(),
+        )
         .map_err(|e| e.to_string())?;
 
     if let Some(prev_id) = previous_model {

@@ -7,7 +7,9 @@ use crate::context_detector::{
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
 use crate::managers::model::{EngineType, ModelInfo, ModelManager};
-use crate::managers::transcription::{TranscriptionManager, TranscriptionRequest};
+use crate::managers::transcription::{
+    TranscriptionManager, TranscriptionRequest,
+};
 use crate::runtime_observability::{
     emit_lifecycle_state, emit_pipeline_profile, emit_runtime_error, PipelineProfileEvent,
     PipelineStepTiming, RuntimeErrorStage, TranscriptionLifecycleState,
@@ -1260,6 +1262,8 @@ impl ShortcutAction for TranscribeAction {
             struct TranscriptionResult {
                 samples: Vec<f32>,
                 transcription: String,
+                confidence_payload:
+                    Option<crate::transcription_confidence::TranscriptionConfidencePayload>,
                 #[allow(dead_code)]
                 chunk_count: usize,
             }
@@ -1403,6 +1407,7 @@ impl ShortcutAction for TranscribeAction {
                 Some(TranscriptionResult {
                     samples: all_samples,
                     transcription,
+                    confidence_payload: None,
                     chunk_count,
                 })
             } else {
@@ -1540,18 +1545,18 @@ impl ShortcutAction for TranscribeAction {
 
                 let transcription_time = Instant::now();
                 let samples_clone_fb = samples.clone();
-                let transcription = match tm.transcribe_request(TranscriptionRequest {
+                let transcription_output = match tm.transcribe_detailed_request(TranscriptionRequest {
                     audio: samples.clone(),
                     app_context: active_app_context.clone(),
                 }) {
-                    Ok(mut text) => {
+                    Ok(mut output) => {
                         if let Ok(mut p) = profiler.lock() {
                             p.push_step_since(
                                 "transcribe_primary",
                                 transcription_time,
                                 Some(format!(
                                     "chars={}, duration_s={:.2}",
-                                    text.chars().count(),
+                                    output.text.chars().count(),
                                     duration_seconds
                                 )),
                             );
@@ -1559,10 +1564,10 @@ impl ShortcutAction for TranscribeAction {
                         debug!(
                             "Transcription in {:?}: '{}'",
                             transcription_time.elapsed(),
-                            text
+                            output.text
                         );
                         // Fallback retry with accurate model on empty result
-                        if text.is_empty() && duration_seconds > 1.0 && !switched_model {
+                        if output.text.is_empty() && duration_seconds > 1.0 && !switched_model {
                             if let Some(ref long_model_id) = settings_for_model.long_audio_model {
                                 if original_model.as_deref() != Some(long_model_id.as_str()) {
                                     let retry_started = Instant::now();
@@ -1572,13 +1577,13 @@ impl ShortcutAction for TranscribeAction {
                                     );
                                     if tm.load_model(long_model_id).is_ok() {
                                         if let Ok(retry) =
-                                            tm.transcribe_request(TranscriptionRequest {
+                                            tm.transcribe_detailed_request(TranscriptionRequest {
                                                 audio: samples_clone_fb,
                                                 app_context: active_app_context.clone(),
                                             })
                                         {
-                                            if !retry.is_empty() {
-                                                text = retry;
+                                            if !retry.text.is_empty() {
+                                                output = retry;
                                             }
                                         }
                                         if let Ok(mut p) = profiler.lock() {
@@ -1589,14 +1594,17 @@ impl ShortcutAction for TranscribeAction {
                                             p.push_step_since(
                                                 "transcribe_retry_long_model",
                                                 retry_started,
-                                                Some(format!("chars={}", text.chars().count())),
+                                                Some(format!(
+                                                    "chars={}",
+                                                    output.text.chars().count()
+                                                )),
                                             );
                                         }
                                     }
                                 }
                             }
                         }
-                        text
+                        output
                     }
                     Err(err) => {
                         let reason = format!("Transcription error: {}", err);
@@ -1647,7 +1655,8 @@ impl ShortcutAction for TranscribeAction {
 
                 Some(TranscriptionResult {
                     samples,
-                    transcription,
+                    transcription: transcription_output.text,
+                    confidence_payload: transcription_output.confidence_payload,
                     chunk_count: 1,
                 })
             };
@@ -1656,6 +1665,7 @@ impl ShortcutAction for TranscribeAction {
             if let Some(TranscriptionResult {
                 samples,
                 transcription,
+                confidence_payload,
                 ..
             }) = result
             {
@@ -1935,6 +1945,7 @@ impl ShortcutAction for TranscribeAction {
                             .save_transcription(
                                 samples_clone,
                                 transcription_for_history,
+                                confidence_payload,
                                 post_processed_text,
                                 post_process_prompt,
                                 action_key_for_history,

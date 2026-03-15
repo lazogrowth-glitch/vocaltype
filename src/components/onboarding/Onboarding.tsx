@@ -16,6 +16,23 @@ interface AdaptiveProfileSnapshot {
   copilot_plus_detected?: boolean;
 }
 
+const isCopilotOptimizedParakeet = (
+  profile: AdaptiveProfileSnapshot | null,
+  modelId: string,
+): boolean => {
+  if (
+    modelId !== "parakeet-tdt-0.6b-v3-english" &&
+    modelId !== "parakeet-tdt-0.6b-v3-multilingual"
+  ) {
+    return false;
+  }
+
+  return (
+    !!profile?.npu_detected &&
+    (profile.npu_kind === "qualcomm" || profile.npu_kind === "intel")
+  );
+};
+
 const getOnboardingRank = (model: ModelInfo): number => {
   if (model.id === "parakeet-tdt-0.6b-v3-multilingual") return 1000;
   if (model.id === "parakeet-tdt-0.6b-v3-english") return 980;
@@ -132,7 +149,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
         id: "fast",
         title: t("onboarding.mode.fast", { defaultValue: "Rapide" }),
         description: t("onboarding.mode.fastDescription", {
-          defaultValue: "Lowest latency for quick dictation",
+          defaultValue:
+            isCopilotOptimizedParakeet(adaptiveProfile, rapidId)
+              ? "Lowest latency with the NPU path on this PC"
+              : "Lowest latency for quick dictation",
         }),
         modelId: rapidId,
       },
@@ -240,6 +260,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
                 onDownload={handleDownloadModel}
                 downloadProgress={getModelDownloadProgress(model.id)}
                 downloadSpeed={getModelDownloadSpeed(model.id)}
+                copilotOptimized={isCopilotOptimizedParakeet(
+                  adaptiveProfile,
+                  model.id,
+                )}
               />
             ))}
 
@@ -260,6 +284,10 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
                 onDownload={handleDownloadModel}
                 downloadProgress={getModelDownloadProgress(model.id)}
                 downloadSpeed={getModelDownloadSpeed(model.id)}
+                copilotOptimized={isCopilotOptimizedParakeet(
+                  adaptiveProfile,
+                  model.id,
+                )}
               />
             ))}
         </div>

@@ -136,6 +136,8 @@ impl From<WhisperfileOutput> for TranscriptionResult {
                         start: s.start,
                         end: s.end,
                         text: s.text,
+                        confidence: None,
+                        words: None,
                     })
                     .collect(),
             )

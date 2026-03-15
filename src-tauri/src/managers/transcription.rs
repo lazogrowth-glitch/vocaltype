@@ -6,6 +6,9 @@ use crate::settings::{
     get_settings, record_whisper_backend_failure, set_active_runtime_model,
     set_active_whisper_backend, ModelUnloadTimeout, NpuKind, WhisperBackendPreference,
 };
+use crate::transcription_confidence::{
+    build_whisper_confidence_payload, TranscriptionConfidencePayload,
+};
 use crate::vocabulary_store::VocabularyStoreState;
 use crate::voice_profile::{current_voice_profile, VoiceProfile};
 use anyhow::Result;
@@ -87,9 +90,14 @@ fn parakeet_v3_provider_candidates(app_handle: &AppHandle) -> Vec<ParakeetExecut
         }
         NpuKind::Intel => {
             providers.push(ParakeetExecutionProvider::OpenVinoNpu);
+            providers.push(ParakeetExecutionProvider::OpenVinoGpu);
             providers.push(ParakeetExecutionProvider::OpenVINO);
         }
-        NpuKind::Amd | NpuKind::Unknown | NpuKind::None => {}
+        NpuKind::Amd => {
+            providers.push(ParakeetExecutionProvider::OpenVinoGpu);
+            providers.push(ParakeetExecutionProvider::DirectML);
+        }
+        NpuKind::Unknown | NpuKind::None => {}
     }
 
     providers.push(ParakeetExecutionProvider::Cpu);
@@ -126,6 +134,18 @@ pub struct ModelStateEvent {
 pub struct TranscriptionRequest {
     pub audio: Vec<f32>,
     pub app_context: Option<AppTranscriptionContext>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TranscriptionOutput {
+    pub text: String,
+    pub confidence_payload: Option<TranscriptionConfidencePayload>,
+}
+
+#[derive(Debug)]
+struct EngineTranscriptionResult {
+    text: String,
+    segments: Option<Vec<transcribe_rs::TranscriptionSegment>>,
 }
 
 enum LoadedEngine {
@@ -760,14 +780,23 @@ impl TranscriptionManager {
             .map(|info| info.name)
     }
 
+    #[allow(dead_code)]
     pub fn transcribe(&self, audio: Vec<f32>) -> Result<String> {
-        self.transcribe_request(TranscriptionRequest {
+        self.transcribe_detailed_request(TranscriptionRequest {
             audio,
             app_context: None,
         })
+        .map(|result| result.text)
     }
 
     pub fn transcribe_request(&self, request: TranscriptionRequest) -> Result<String> {
+        self.transcribe_detailed_request(request).map(|result| result.text)
+    }
+
+    pub fn transcribe_detailed_request(
+        &self,
+        request: TranscriptionRequest,
+    ) -> Result<TranscriptionOutput> {
         // Update last activity timestamp
         self.last_activity.store(
             SystemTime::now()
@@ -785,7 +814,10 @@ impl TranscriptionManager {
         if audio.is_empty() {
             debug!("Empty audio vector");
             self.maybe_unload_immediately("empty audio");
-            return Ok(String::new());
+            return Ok(TranscriptionOutput {
+                text: String::new(),
+                confidence_payload: None,
+            });
         }
 
         // Check if model is loaded, if not try to load it
@@ -883,7 +915,10 @@ impl TranscriptionManager {
                 );
 
                 self.maybe_unload_immediately("gemini transcription");
-                return Ok(final_result);
+                return Ok(TranscriptionOutput {
+                    text: final_result,
+                    confidence_payload: None,
+                });
             }
         }
 
@@ -908,7 +943,8 @@ impl TranscriptionManager {
             // Release the lock before transcribing — no mutex held during the engine call
             drop(engine_guard);
 
-            let transcribe_result = catch_unwind(AssertUnwindSafe(|| -> Result<String> {
+            let transcribe_result =
+                catch_unwind(AssertUnwindSafe(|| -> Result<EngineTranscriptionResult> {
                 match &mut engine {
                     LoadedEngine::Whisper(whisper_engine) => {
                         let whisper_language = if settings.selected_language == "auto" {
@@ -965,7 +1001,10 @@ impl TranscriptionManager {
 
                         whisper_engine
                             .transcribe_samples(audio, Some(params))
-                            .map(|result| result.text)
+                            .map(|result| EngineTranscriptionResult {
+                                text: result.text,
+                                segments: result.segments,
+                            })
                             .map_err(|e| anyhow::anyhow!("Whisper transcription failed: {}", e))
                     }
                     LoadedEngine::Parakeet(parakeet_engine) => {
@@ -975,7 +1014,10 @@ impl TranscriptionManager {
                         };
                         parakeet_engine
                             .transcribe_samples(audio, Some(params))
-                            .map(|result| result.text)
+                            .map(|result| EngineTranscriptionResult {
+                                text: result.text,
+                                segments: None,
+                            })
                             .map_err(|e| anyhow::anyhow!("Parakeet transcription failed: {}", e))
                     }
                     LoadedEngine::ParakeetV3(parakeet_engine) => parakeet_engine
@@ -997,15 +1039,24 @@ impl TranscriptionManager {
                                 Some(ParakeetTimestampMode::Words),
                             )
                         })
-                        .map(|result| result.text)
+                        .map(|result| EngineTranscriptionResult {
+                            text: result.text,
+                            segments: None,
+                        })
                         .map_err(|e| anyhow::anyhow!("Parakeet V3 transcription failed: {}", e)),
                     LoadedEngine::Moonshine(moonshine_engine) => moonshine_engine
                         .transcribe_samples(audio, None)
-                        .map(|result| result.text)
+                        .map(|result| EngineTranscriptionResult {
+                            text: result.text,
+                            segments: None,
+                        })
                         .map_err(|e| anyhow::anyhow!("Moonshine transcription failed: {}", e)),
                     LoadedEngine::MoonshineStreaming(streaming_engine) => streaming_engine
                         .transcribe_samples(audio, None)
-                        .map(|result| result.text)
+                        .map(|result| EngineTranscriptionResult {
+                            text: result.text,
+                            segments: None,
+                        })
                         .map_err(|e| {
                             anyhow::anyhow!("Moonshine streaming transcription failed: {}", e)
                         }),
@@ -1024,7 +1075,10 @@ impl TranscriptionManager {
                         };
                         sense_voice_engine
                             .transcribe_samples(audio, Some(params))
-                            .map(|result| result.text)
+                            .map(|result| EngineTranscriptionResult {
+                                text: result.text,
+                                segments: None,
+                            })
                             .map_err(|e| anyhow::anyhow!("SenseVoice transcription failed: {}", e))
                     }
                     LoadedEngine::GeminiApi => {
@@ -1083,14 +1137,15 @@ impl TranscriptionManager {
         };
 
         // Apply word correction if custom words are configured
+        let raw_result = result.text;
         let corrected_result = if !settings.custom_words.is_empty() {
             apply_custom_words(
-                &result,
+                &raw_result,
                 &settings.custom_words,
                 settings.word_correction_threshold,
             )
         } else {
-            result
+            raw_result
         };
 
         let filtered_result = Self::filter_transcription_output_for_context(
@@ -1128,7 +1183,15 @@ impl TranscriptionManager {
 
         self.maybe_unload_immediately("transcription");
 
-        Ok(final_result)
+        let confidence_payload = result
+            .segments
+            .as_ref()
+            .and_then(|segments| build_whisper_confidence_payload(segments, &final_result));
+
+        Ok(TranscriptionOutput {
+            text: final_result,
+            confidence_payload,
+        })
     }
 }
 

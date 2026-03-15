@@ -42,11 +42,15 @@ mod tests {
                     start: 0.0,
                     end: 1.0,
                     text: "twenty three dollars".to_string(),
+                    confidence: None,
+                    words: None,
                 },
                 TranscriptionSegment {
                     start: 1.0,
                     end: 2.0,
                     text: "one hundred fifty two".to_string(),
+                    confidence: None,
+                    words: None,
                 },
             ]),
         };

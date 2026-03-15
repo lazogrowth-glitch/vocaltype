@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::audio_toolkit::save_wav_file;
+use crate::transcription_confidence::TranscriptionConfidencePayload;
 
 const RECORDING_FILE_PREFIX: &str = "vocaltype";
 
@@ -35,6 +36,7 @@ static MIGRATIONS: &[M] = &[
     M::up("ALTER TABLE transcription_history ADD COLUMN post_process_prompt TEXT;"),
     M::up("ALTER TABLE transcription_history ADD COLUMN post_process_action_key INTEGER;"),
     M::up("ALTER TABLE transcription_history ADD COLUMN model_name TEXT;"),
+    M::up("ALTER TABLE transcription_history ADD COLUMN confidence_payload_json TEXT;"),
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize, Type)]
@@ -49,6 +51,7 @@ pub struct HistoryEntry {
     pub post_process_prompt: Option<String>,
     pub post_process_action_key: Option<u8>,
     pub model_name: Option<String>,
+    pub confidence_payload: Option<TranscriptionConfidencePayload>,
 }
 
 pub struct HistoryManager {
@@ -187,6 +190,7 @@ impl HistoryManager {
         &self,
         audio_samples: Vec<f32>,
         transcription_text: String,
+        confidence_payload: Option<TranscriptionConfidencePayload>,
         post_processed_text: Option<String>,
         post_process_prompt: Option<String>,
         post_process_action_key: Option<u8>,
@@ -206,6 +210,7 @@ impl HistoryManager {
             timestamp,
             title,
             transcription_text,
+            confidence_payload,
             post_processed_text,
             post_process_prompt,
             post_process_action_key,
@@ -229,15 +234,18 @@ impl HistoryManager {
         timestamp: i64,
         title: String,
         transcription_text: String,
+        confidence_payload: Option<TranscriptionConfidencePayload>,
         post_processed_text: Option<String>,
         post_process_prompt: Option<String>,
         post_process_action_key: Option<u8>,
         model_name: Option<String>,
     ) -> Result<()> {
         let conn = self.get_connection()?;
+        let confidence_payload_json =
+            confidence_payload.and_then(|payload| serde_json::to_string(&payload).ok());
         conn.execute(
-            "INSERT INTO transcription_history (file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key, model_name) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-            params![file_name, timestamp, false, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key.map(|k| k as i64), model_name],
+            "INSERT INTO transcription_history (file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key, model_name, confidence_payload_json) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![file_name, timestamp, false, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key.map(|k| k as i64), model_name, confidence_payload_json],
         )?;
 
         debug!("Saved transcription to database");
@@ -367,7 +375,7 @@ impl HistoryManager {
     pub async fn get_history_entries(&self) -> Result<Vec<HistoryEntry>> {
         let conn = self.get_connection()?;
         let mut stmt = conn.prepare(
-            "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key, model_name FROM transcription_history ORDER BY timestamp DESC"
+            "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key, model_name, confidence_payload_json FROM transcription_history ORDER BY timestamp DESC"
         )?;
 
         let rows = stmt.query_map([], |row| {
@@ -384,6 +392,9 @@ impl HistoryManager {
                     .get::<_, Option<i64>>("post_process_action_key")?
                     .and_then(|v| u8::try_from(v).ok()),
                 model_name: row.get("model_name")?,
+                confidence_payload: row
+                    .get::<_, Option<String>>("confidence_payload_json")?
+                    .and_then(|json| serde_json::from_str(&json).ok()),
             })
         })?;
 
@@ -402,7 +413,7 @@ impl HistoryManager {
 
     fn get_latest_entry_with_conn(conn: &Connection) -> Result<Option<HistoryEntry>> {
         let mut stmt = conn.prepare(
-            "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key, model_name
+            "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key, model_name, confidence_payload_json
              FROM transcription_history
              ORDER BY timestamp DESC
              LIMIT 1",
@@ -423,6 +434,9 @@ impl HistoryManager {
                         .get::<_, Option<i64>>("post_process_action_key")?
                         .and_then(|v| u8::try_from(v).ok()),
                     model_name: row.get("model_name")?,
+                    confidence_payload: row
+                        .get::<_, Option<String>>("confidence_payload_json")?
+                        .and_then(|json| serde_json::from_str(&json).ok()),
                 })
             })
             .optional()?;
@@ -465,12 +479,15 @@ impl HistoryManager {
         &self,
         id: i64,
         new_text: &str,
+        confidence_payload: Option<&TranscriptionConfidencePayload>,
         model_name: Option<&str>,
     ) -> Result<()> {
         let conn = self.get_connection()?;
+        let confidence_payload_json =
+            confidence_payload.and_then(|payload| serde_json::to_string(payload).ok());
         conn.execute(
-            "UPDATE transcription_history SET transcription_text = ?1, model_name = ?2 WHERE id = ?3",
-            params![new_text, model_name, id],
+            "UPDATE transcription_history SET transcription_text = ?1, confidence_payload_json = ?2, model_name = ?3 WHERE id = ?4",
+            params![new_text, confidence_payload_json, model_name, id],
         )?;
 
         debug!("Updated transcription text for entry {}", id);
@@ -485,7 +502,7 @@ impl HistoryManager {
     pub async fn get_entry_by_id(&self, id: i64) -> Result<Option<HistoryEntry>> {
         let conn = self.get_connection()?;
         let mut stmt = conn.prepare(
-            "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key, model_name
+            "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key, model_name, confidence_payload_json
              FROM transcription_history WHERE id = ?1",
         )?;
 
@@ -504,6 +521,9 @@ impl HistoryManager {
                         .get::<_, Option<i64>>("post_process_action_key")?
                         .and_then(|v| u8::try_from(v).ok()),
                     model_name: row.get("model_name")?,
+                    confidence_payload: row
+                        .get::<_, Option<String>>("confidence_payload_json")?
+                        .and_then(|json| serde_json::from_str(&json).ok()),
                 })
             })
             .optional()?;
@@ -571,7 +591,8 @@ mod tests {
                 post_processed_text TEXT,
                 post_process_prompt TEXT,
                 post_process_action_key INTEGER,
-                model_name TEXT
+                model_name TEXT,
+                confidence_payload_json TEXT
             );",
         )
         .expect("create transcription_history table");

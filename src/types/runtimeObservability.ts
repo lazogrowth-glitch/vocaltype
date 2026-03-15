@@ -58,6 +58,14 @@ export type AdaptiveCalibrationState =
   | "completed"
   | "failed"
   | "fallback_applied";
+export type MachineStatusMode =
+  | "optimal"
+  | "battery"
+  | "saver"
+  | "thermal"
+  | "memory_limited"
+  | "fallback"
+  | "calibrating";
 
 export interface MachineScoreDetails {
   ram_score: number;
@@ -170,6 +178,15 @@ export interface VoiceRuntimeAdjustmentSnapshot {
   reason?: string | null;
 }
 
+export interface MachineStatusSnapshot {
+  mode: MachineStatusMode;
+  degraded: boolean;
+  headline: string;
+  detail: string;
+  active_model_id?: string | null;
+  active_backend?: string | null;
+}
+
 export interface RuntimeDiagnosticsSnapshot {
   captured_at_ms: number;
   app_version: string;
@@ -192,6 +209,7 @@ export interface RuntimeDiagnosticsSnapshot {
   adaptive_voice_profile_enabled: boolean;
   adaptive_voice_profile?: VoiceProfileSnapshot | null;
   active_voice_runtime_adjustment?: VoiceRuntimeAdjustmentSnapshot | null;
+  machine_status?: MachineStatusSnapshot | null;
   adaptive_machine_profile?: AdaptiveMachineProfileSnapshot | null;
   adaptive_calibration_state?: CalibrationStatusSnapshot[];
 }

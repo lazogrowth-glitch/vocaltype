@@ -882,9 +882,10 @@ export type AudioDevice = { index: string; name: string; is_default: boolean }
 export type AutoSubmitKey = "enter" | "ctrl_enter" | "cmd_enter"
 export type BindingResponse = { success: boolean; binding: ShortcutBinding | null; error: string | null }
 export type ClipboardHandling = "dont_modify" | "copy_to_clipboard"
+export type ConfidenceWord = { text: string; confidence: number }
 export type CustomSounds = { start: boolean; stop: boolean }
 export type EngineType = "Whisper" | "Parakeet" | "Moonshine" | "MoonshineStreaming" | "SenseVoice" | "GeminiApi"
-export type HistoryEntry = { id: number; file_name: string; timestamp: number; saved: boolean; title: string; transcription_text: string; post_processed_text: string | null; post_process_prompt: string | null; post_process_action_key: number | null; model_name: string | null }
+export type HistoryEntry = { id: number; file_name: string; timestamp: number; saved: boolean; title: string; transcription_text: string; post_processed_text: string | null; post_process_prompt: string | null; post_process_action_key: number | null; model_name: string | null; confidence_payload: TranscriptionConfidencePayload | null }
 /**
  * Result of changing keyboard implementation
  */
@@ -907,16 +908,19 @@ export type PipelineStepTiming = { step: string; duration_ms: number; detail: st
 export type PostProcessAction = { key: number; name: string; prompt: string; model?: string | null; provider_id?: string | null }
 export type PostProcessProvider = { id: string; label: string; base_url: string; allow_base_url_edit?: boolean; models_endpoint?: string | null; supports_structured_output?: boolean }
 export type RecordingRetentionPeriod = "never" | "preserve_limit" | "days_3" | "weeks_2" | "months_3"
-export type RuntimeDiagnostics = { captured_at_ms: number; app_version: string; lifecycle_state: TranscriptionLifecycleState; last_lifecycle_event: LifecycleStateEvent; recent_errors: RuntimeErrorEvent[]; selected_model: string; loaded_model_id: string | null; loaded_model_name: string | null; model_loaded: boolean; paste_method: string; clipboard_handling: string; selected_language: string; selected_microphone: string | null; selected_output_device: string | null; is_recording: boolean; is_paused: boolean; current_app_context: AppTranscriptionContext | null; last_transcription_app_context: AppTranscriptionContext | null; adaptive_voice_profile_enabled: boolean; adaptive_voice_profile: VoiceProfile | null; active_voice_runtime_adjustment: VoiceRuntimeAdjustment | null; recent_pipeline_profiles: PipelineProfileEvent[] }
+export type RuntimeDiagnostics = { captured_at_ms: number; app_version: string; lifecycle_state: TranscriptionLifecycleState; last_lifecycle_event: LifecycleStateEvent; recent_errors: RuntimeErrorEvent[]; selected_model: string; loaded_model_id: string | null; loaded_model_name: string | null; model_loaded: boolean; paste_method: string; clipboard_handling: string; selected_language: string; selected_microphone: string | null; selected_output_device: string | null; is_recording: boolean; is_paused: boolean; current_app_context: AppTranscriptionContext | null; last_transcription_app_context: AppTranscriptionContext | null; adaptive_voice_profile_enabled: boolean; adaptive_voice_profile: VoiceProfile | null; active_voice_runtime_adjustment: VoiceRuntimeAdjustment | null; machine_status: MachineStatusSnapshot | null; recent_pipeline_profiles: PipelineProfileEvent[] }
 export type RuntimeErrorEvent = { code: string; stage: RuntimeErrorStage; message: string; recoverable: boolean; timestamp_ms: number }
 export type RuntimeErrorStage = "capture" | "vad" | "transcription" | "post_process" | "paste" | "shortcut" | "model" | "system" | "unknown"
 export type SavedProcessingModel = { id: string; provider_id: string; model_id: string; label: string }
 export type ShortcutBinding = { id: string; name: string; description: string; default_binding: string; current_binding: string }
 export type SoundTheme = "marimba" | "pop" | "custom"
+export type TranscriptionConfidencePayload = { engine: string; overall_confidence: number; mapping_stable: boolean; words: ConfidenceWord[] }
 export type TranscriptionLifecycleState = "idle" | "recording" | "transcribing" | "processing" | "pasting" | "error"
 export type TypingTool = "auto" | "wtype" | "kwtype" | "dotool" | "ydotool" | "xdotool"
 export type VoiceProfile = { sessions_count: number; avg_words_per_minute: number; avg_pause_ms: number; preferred_terms: string[]; last_updated_ms?: number | null }
 export type VoiceRuntimeAdjustment = { adjusted_chunk_seconds: number; adjusted_overlap_ms: number; vad_hangover_frames_delta: number; reason?: string | null }
+export type MachineStatusMode = "optimal" | "battery" | "saver" | "thermal" | "memory_limited" | "fallback" | "calibrating"
+export type MachineStatusSnapshot = { mode: MachineStatusMode; degraded: boolean; headline: string; detail: string; active_model_id?: string | null; active_backend?: string | null }
 
 /** tauri-specta globals **/
 

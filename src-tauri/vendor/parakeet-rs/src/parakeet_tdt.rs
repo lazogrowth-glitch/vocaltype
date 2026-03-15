@@ -89,7 +89,7 @@ impl Transcriber for ParakeetTDT {
     fn transcribe_samples(
         &mut self,
         audio: Vec<f32>,
-        sample_rate: u32,
+        _sample_rate: u32,
         channels: u16,
         mode: Option<TimestampMode>,
     ) -> Result<TranscriptionResult> {

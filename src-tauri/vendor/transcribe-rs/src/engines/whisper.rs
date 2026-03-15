@@ -60,9 +60,87 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-use crate::{TranscriptionEngine, TranscriptionResult, TranscriptionSegment};
+use crate::{
+    TranscriptionEngine, TranscriptionResult, TranscriptionSegment, TranscriptionWord,
+};
 use std::path::{Path, PathBuf};
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
+
+fn is_punctuation_token(token: &str) -> bool {
+    let trimmed = token.trim();
+    !trimmed.is_empty()
+        && trimmed
+            .chars()
+            .all(|ch| !ch.is_alphanumeric() && !ch.is_whitespace())
+}
+
+fn build_segment_words(
+    state: &whisper_rs::WhisperState,
+    segment_index: i32,
+) -> Result<(Vec<TranscriptionWord>, Option<f32>), Box<dyn std::error::Error>> {
+    let n_tokens = state.full_n_tokens(segment_index)?;
+    let mut words: Vec<TranscriptionWord> = Vec::new();
+    let mut current_text = String::new();
+    let mut current_scores: Vec<f32> = Vec::new();
+    let mut token_scores: Vec<f32> = Vec::new();
+
+    let flush_word =
+        |words: &mut Vec<TranscriptionWord>, current_text: &mut String, current_scores: &mut Vec<f32>| {
+            let trimmed = current_text.trim();
+            if trimmed.is_empty() || current_scores.is_empty() {
+                current_text.clear();
+                current_scores.clear();
+                return;
+            }
+
+            let confidence =
+                current_scores.iter().copied().sum::<f32>() / current_scores.len() as f32;
+            words.push(TranscriptionWord {
+                text: trimmed.to_string(),
+                confidence: confidence.clamp(0.0, 1.0),
+            });
+            current_text.clear();
+            current_scores.clear();
+        };
+
+    for token_index in 0..n_tokens {
+        let token_text = state.full_get_token_text_lossy(segment_index, token_index)?;
+        let token_confidence = state
+            .full_get_token_prob(segment_index, token_index)?
+            .clamp(0.0, 1.0);
+        token_scores.push(token_confidence);
+
+        if token_text.trim().is_empty() {
+            flush_word(&mut words, &mut current_text, &mut current_scores);
+            continue;
+        }
+
+        let starts_new_word = token_text
+            .chars()
+            .next()
+            .map(char::is_whitespace)
+            .unwrap_or(false);
+
+        if starts_new_word && !current_text.trim().is_empty() {
+            flush_word(&mut words, &mut current_text, &mut current_scores);
+        }
+
+        if is_punctuation_token(&token_text) && current_text.trim().is_empty() {
+            current_text.push_str(token_text.trim());
+        } else {
+            current_text.push_str(&token_text);
+        }
+        current_scores.push(token_confidence);
+    }
+
+    flush_word(&mut words, &mut current_text, &mut current_scores);
+
+    let segment_confidence = (!token_scores.is_empty()).then_some(
+        (token_scores.iter().copied().sum::<f32>() / token_scores.len() as f32).clamp(0.0, 1.0),
+    );
+
+    Ok((words, segment_confidence))
+}
 
 /// Parameters for configuring Whisper model loading.
 #[derive(Debug, Clone)]
@@ -351,11 +429,14 @@ impl TranscriptionEngine for WhisperEngine {
             let text = state.full_get_segment_text(i)?;
             let start = state.full_get_segment_t0(i)? as f32 / 100.0;
             let end = state.full_get_segment_t1(i)? as f32 / 100.0;
+            let (words, confidence) = build_segment_words(&state, i)?;
 
             segments.push(TranscriptionSegment {
                 start,
                 end,
                 text: text.clone(),
+                confidence,
+                words: Some(words),
             });
             full_text.push_str(&text);
         }
