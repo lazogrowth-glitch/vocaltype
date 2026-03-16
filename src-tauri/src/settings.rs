@@ -1033,6 +1033,29 @@ fn open_wmi_com_library() -> Option<wmi::COMLibrary> {
 
 #[cfg(target_os = "windows")]
 fn detect_gpu_snapshot() -> GpuSnapshot {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(detect_gpu_snapshot_inner());
+    });
+
+    match rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(snapshot) => snapshot,
+        Err(_) => {
+            warn!("WMI GPU detection timed out, using Unknown fallback");
+            GpuSnapshot {
+                detected: true,
+                kind: GpuKind::Unknown,
+                name: None,
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn detect_gpu_snapshot_inner() -> GpuSnapshot {
     use wmi::WMIConnection;
 
     let Some(com) = open_wmi_com_library() else {
@@ -1099,6 +1122,26 @@ fn detect_gpu_snapshot() -> GpuSnapshot {
 
 #[cfg(target_os = "windows")]
 fn detect_npu_snapshot(cpu_brand_upper: &str) -> NpuSnapshot {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let cpu_brand_upper = cpu_brand_upper.to_owned();
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = tx.send(detect_npu_snapshot_inner(&cpu_brand_upper));
+    });
+
+    match rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(snapshot) => snapshot,
+        Err(_) => {
+            warn!("WMI NPU detection timed out, using default fallback");
+            NpuSnapshot::default()
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn detect_npu_snapshot_inner(cpu_brand_upper: &str) -> NpuSnapshot {
     use wmi::WMIConnection;
 
     let Some(com) = open_wmi_com_library() else {
@@ -1114,7 +1157,7 @@ fn detect_npu_snapshot(cpu_brand_upper: &str) -> NpuSnapshot {
     };
 
     let entities: Vec<Win32PnPEntity> = match connection
-        .raw_query("SELECT Name, Manufacturer, PNPClass, DeviceID FROM Win32_PnPEntity")
+        .raw_query("SELECT Name, Manufacturer, PNPClass, DeviceID FROM Win32_PnPEntity WHERE PNPClass = 'System' OR PNPClass = 'Processor' OR Name LIKE '%NPU%' OR Name LIKE '%AI%' OR Name LIKE '%Neural%' OR Name LIKE '%Hexagon%' OR Name LIKE '%Ryzen AI%'")
     {
         Ok(value) => value,
         Err(err) => {
@@ -1574,41 +1617,25 @@ fn ensure_adaptive_profile(app: &AppHandle, settings: &mut AppSettings) -> bool 
             .map(|profile| profile_is_stale(profile, app))
             .unwrap_or(true);
 
-    let mut detected = detect_adaptive_machine_profile(app, &settings.app_language);
-    if let Some(existing) = settings.adaptive_machine_profile.clone() {
-        detected = merge_whisper_profile(detected, existing);
-    }
-    normalize_adaptive_profile(&mut detected);
-
     if needs_new_profile {
+        // Full hardware detection (WMI GPU/NPU/thermal) — only when profile is missing or stale.
+        let mut detected = detect_adaptive_machine_profile(app, &settings.app_language);
+        if let Some(existing) = settings.adaptive_machine_profile.clone() {
+            detected = merge_whisper_profile(detected, existing);
+        }
+        normalize_adaptive_profile(&mut detected);
         settings.adaptive_machine_profile = Some(detected);
         settings.adaptive_profile_applied = true;
         changed = true;
     } else if let Some(existing) = settings.adaptive_machine_profile.as_mut() {
+        // Profile is fresh — apply only cheap metadata updates, no WMI re-detection.
         let current_selected_model = settings.selected_model.clone();
         let new_recommended = preferred_model_for_locale(&settings.app_language);
         let new_secondary =
-            secondary_model_for_locale(&settings.app_language, detected.machine_tier);
+            secondary_model_for_locale(&settings.app_language, existing.machine_tier);
         let has_diff = existing.profile_schema_version != ADAPTIVE_PROFILE_SCHEMA_VERSION
             || existing.app_version != current_app_version(app)
             || existing.backend_version != BACKEND_VERSION
-            || existing.machine_score_details.final_score
-                != detected.machine_score_details.final_score
-            || existing.machine_tier != detected.machine_tier
-            || existing.cpu_brand != detected.cpu_brand
-            || existing.logical_cores != detected.logical_cores
-            || existing.total_memory_gb != detected.total_memory_gb
-            || existing.low_power_cpu != detected.low_power_cpu
-            || existing.gpu_detected != detected.gpu_detected
-            || existing.gpu_kind != detected.gpu_kind
-            || existing.gpu_name != detected.gpu_name
-            || existing.npu_detected != detected.npu_detected
-            || existing.npu_kind != detected.npu_kind
-            || existing.npu_name != detected.npu_name
-            || existing.copilot_plus_detected != detected.copilot_plus_detected
-            || existing.on_battery != detected.on_battery
-            || existing.power_mode != detected.power_mode
-            || existing.thermal_degraded != detected.thermal_degraded
             || existing.recommended_model_id != new_recommended
             || existing.secondary_model_id != new_secondary
             || profile_needs_turbo_cooldown_normalization(existing)
@@ -1620,23 +1647,6 @@ fn ensure_adaptive_profile(app: &AppHandle, settings: &mut AppSettings) -> bool 
             existing.profile_schema_version = ADAPTIVE_PROFILE_SCHEMA_VERSION;
             existing.app_version = current_app_version(app);
             existing.backend_version = BACKEND_VERSION.to_string();
-            existing.machine_score_details = detected.machine_score_details;
-            existing.machine_tier = detected.machine_tier;
-            existing.cpu_brand = detected.cpu_brand;
-            existing.logical_cores = detected.logical_cores;
-            existing.total_memory_gb = detected.total_memory_gb;
-            existing.low_power_cpu = detected.low_power_cpu;
-            existing.gpu_detected = detected.gpu_detected;
-            existing.gpu_kind = detected.gpu_kind;
-            existing.gpu_name = detected.gpu_name;
-            existing.npu_detected = detected.npu_detected;
-            existing.npu_kind = detected.npu_kind;
-            existing.npu_name = detected.npu_name;
-            existing.copilot_plus_detected = detected.copilot_plus_detected;
-            existing.on_battery = detected.on_battery;
-            existing.power_mode = detected.power_mode;
-            existing.thermal_degraded = detected.thermal_degraded;
-            existing.runtime_power_snapshot_at = detected.runtime_power_snapshot_at;
             existing.recommended_model_id = new_recommended;
             existing.secondary_model_id = new_secondary;
             if !current_selected_model.is_empty() {
@@ -2167,6 +2177,60 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
     }
 
     settings
+}
+
+/// Fast variant: reads settings without running WMI hardware detection.
+/// Use at startup so the app window appears instantly.
+/// Always follow this with `refresh_adaptive_profile_if_needed()` in a background thread.
+pub fn get_settings_fast(app: &AppHandle) -> AppSettings {
+    let store = app
+        .store(SETTINGS_STORE_PATH)
+        .expect("Failed to initialize store");
+
+    let mut settings = if let Some(settings_value) = store.get("settings") {
+        serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
+            let default_settings = get_default_settings();
+            store.set("settings", serde_json::to_value(&default_settings).unwrap());
+            persist_store(&store);
+            default_settings
+        })
+    } else {
+        let default_settings = get_default_settings();
+        store.set("settings", serde_json::to_value(&default_settings).unwrap());
+        persist_store(&store);
+        default_settings
+    };
+
+    let post_process_changed = ensure_post_process_defaults(&mut settings);
+    let language_changed = ensure_selected_language_default(&mut settings);
+    if post_process_changed || language_changed {
+        store.set("settings", serde_json::to_value(&settings).unwrap());
+        persist_store(&store);
+    }
+
+    settings
+}
+
+/// Runs adaptive hardware profile detection (WMI GPU/NPU queries) and persists
+/// the result. Safe to call from a background thread after startup.
+pub fn refresh_adaptive_profile_if_needed(app: &AppHandle) {
+    let store = app
+        .store(SETTINGS_STORE_PATH)
+        .expect("Failed to initialize store");
+
+    let mut settings = if let Some(settings_value) = store.get("settings") {
+        serde_json::from_value::<AppSettings>(settings_value)
+            .unwrap_or_else(|_| get_default_settings())
+    } else {
+        get_default_settings()
+    };
+
+    let changed = ensure_adaptive_profile(app, &mut settings);
+    if changed {
+        store.set("settings", serde_json::to_value(&settings).unwrap());
+        persist_store(&store);
+        log::info!("Adaptive machine profile refreshed in background");
+    }
 }
 
 pub fn write_settings(app: &AppHandle, settings: AppSettings) {

@@ -53,8 +53,21 @@ use tauri::{AppHandle, Emitter, Listener, Manager};
 use tauri_plugin_autostart::{MacosLauncher, ManagerExt};
 use tauri_plugin_log::{Builder as LogBuilder, RotationStrategy, Target, TargetKind};
 
-use crate::settings::get_settings;
+use crate::settings::{get_settings_fast, refresh_adaptive_profile_if_needed};
 use adaptive_runtime::maybe_schedule_whisper_calibration;
+
+#[cfg(target_os = "windows")]
+use windows::core::BOOL;
+#[cfg(target_os = "windows")]
+use windows::Win32::Foundation::{HWND, LPARAM};
+#[cfg(target_os = "windows")]
+use windows::Win32::System::Threading::GetCurrentProcessId;
+#[cfg(target_os = "windows")]
+use windows::Win32::UI::WindowsAndMessaging::{
+    BringWindowToTop, EnumWindows, GetWindowTextLengthW, GetWindowTextW,
+    GetWindowThreadProcessId, IsWindowVisible, SetForegroundWindow, SetWindowPos, ShowWindow,
+    SW_RESTORE, SW_SHOW, SWP_NOZORDER,
+};
 
 // Global atomic to store the file log level filter
 // We use u8 to store the log::LevelFilter as a number
@@ -62,6 +75,8 @@ pub static FILE_LOG_LEVEL: AtomicU8 = AtomicU8::new(log::LevelFilter::Debug as u
 
 // Cached tray visibility flag to avoid store access in on_window_event (which can deadlock)
 pub static TRAY_ICON_ENABLED: AtomicBool = AtomicBool::new(true);
+pub static TRAY_ICON_READY: AtomicBool = AtomicBool::new(false);
+pub static SHOULD_SHOW_MAIN_WINDOW_ON_READY: AtomicBool = AtomicBool::new(false);
 
 fn level_filter_from_u8(value: u8) -> log::LevelFilter {
     match value {
@@ -119,7 +134,55 @@ pub(crate) fn show_main_window(app: &AppHandle) {
     }
 }
 
+#[cfg(target_os = "windows")]
+fn force_show_native_main_window() -> bool {
+    unsafe extern "system" fn enum_windows_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+        let current_process_id = GetCurrentProcessId();
+        let mut process_id = 0u32;
+        let _ = GetWindowThreadProcessId(hwnd, Some(&mut process_id));
+        if process_id != current_process_id {
+            return true.into();
+        }
+
+        let len = GetWindowTextLengthW(hwnd);
+        if len <= 0 {
+            return true.into();
+        }
+
+        let mut buffer = vec![0u16; len as usize + 1];
+        let copied = GetWindowTextW(hwnd, &mut buffer);
+        if copied <= 0 {
+            return true.into();
+        }
+
+        let title = String::from_utf16_lossy(&buffer[..copied as usize]);
+        if title != "VocalType" {
+            return true.into();
+        }
+
+        let _ = ShowWindow(hwnd, SW_RESTORE);
+        let _ = ShowWindow(hwnd, SW_SHOW);
+        let _ = SetWindowPos(hwnd, None, 120, 120, 694, 608, SWP_NOZORDER);
+        let _ = BringWindowToTop(hwnd);
+        let _ = SetForegroundWindow(hwnd);
+        let shown = IsWindowVisible(hwnd).as_bool();
+        let target = lparam.0 as *mut bool;
+        if !target.is_null() {
+            *target = shown;
+        }
+        false.into()
+    }
+
+    let mut shown = false;
+    unsafe {
+        let _ = EnumWindows(Some(enum_windows_proc), LPARAM((&mut shown as *mut bool) as isize));
+    }
+    shown
+}
+
 fn initialize_core_logic(app_handle: &AppHandle) -> Result<(), String> {
+    TRAY_ICON_READY.store(false, Ordering::Relaxed);
+
     // Note: Enigo (keyboard/mouse simulation) is NOT initialized here.
     // The frontend is responsible for calling the `initialize_enigo` command
     // after onboarding completes. This avoids triggering permission dialogs
@@ -154,12 +217,27 @@ fn initialize_core_logic(app_handle: &AppHandle) -> Result<(), String> {
         let model_manager = model_manager.clone();
         let transcription_manager = transcription_manager.clone();
         thread::spawn(move || {
-            thread::sleep(Duration::from_secs(2));
+            // Wait for the UI to fully paint before loading the ONNX model into RAM.
+            // 4 s gives even slower machines time to render before the memory spike.
+            thread::sleep(Duration::from_secs(4));
 
             let settings = settings::get_settings(&app_handle);
             if settings.selected_model.is_empty()
                 || settings.model_unload_timeout == settings::ModelUnloadTimeout::Immediately
             {
+                return;
+            }
+
+            // Skip preload on battery to avoid hurting perceived startup speed.
+            let on_battery = settings
+                .adaptive_machine_profile
+                .as_ref()
+                .and_then(|p| p.on_battery)
+                .unwrap_or(false);
+            if on_battery {
+                log::info!(
+                    "Skipping model preload on battery (will load on first use)"
+                );
                 return;
             }
 
@@ -283,11 +361,13 @@ fn initialize_core_logic(app_handle: &AppHandle) -> Result<(), String> {
                 .build(app_handle)
                 .map_err(|err| format!("Failed to build tray icon: {}", err))?;
             app_handle.manage(tray);
+            TRAY_ICON_READY.store(true, Ordering::Relaxed);
 
             // Initialize tray menu with idle state
             utils::update_tray_menu(app_handle, &utils::TrayIconState::Idle, None);
         }
         Err(err) => {
+            TRAY_ICON_READY.store(false, Ordering::Relaxed);
             log::error!("{}", err);
         }
     }
@@ -296,6 +376,7 @@ fn initialize_core_logic(app_handle: &AppHandle) -> Result<(), String> {
     let settings = settings::get_settings(app_handle);
     TRAY_ICON_ENABLED.store(settings.show_tray_icon, Ordering::Relaxed);
     if !settings.show_tray_icon {
+        TRAY_ICON_READY.store(false, Ordering::Relaxed);
         tray::set_tray_visibility(app_handle, false);
     }
 
@@ -558,9 +639,36 @@ pub fn run(cli_args: CliArgs) {
             MacosLauncher::LaunchAgent,
             Some(vec![]),
         ))
+        .on_page_load(|webview, payload| {
+            if webview.label() != "main" {
+                return;
+            }
+
+            log::info!(
+                "Main webview page load {:?}: {}",
+                payload.event(),
+                payload.url()
+            );
+
+            if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                if SHOULD_SHOW_MAIN_WINDOW_ON_READY.load(Ordering::Relaxed) {
+                    log::info!(
+                        "Main webview finished loading before frontend-ready; showing the main window so startup HTML is visible"
+                    );
+                    show_main_window(&webview.app_handle());
+                }
+
+                #[cfg(debug_assertions)]
+                {
+                    webview.open_devtools();
+                    log::info!("Opened devtools for the main webview");
+                }
+            }
+        })
         .manage(cli_args.clone())
         .setup(move |app| {
-            let mut settings = get_settings(&app.handle());
+            // Fast read — no WMI hardware detection, returns instantly.
+            let mut settings = get_settings_fast(&app.handle());
 
             // CLI --debug flag overrides debug_mode and log level (runtime-only, not persisted)
             if cli_args.debug {
@@ -587,29 +695,89 @@ pub fn run(cli_args: CliArgs) {
             )));
             app.manage(runtime_observability::RuntimeObservabilityState::new());
 
+            let app_handle_for_ready = app_handle.clone();
+            app_handle.listen("desktop-ui-ready", move |_| {
+                if SHOULD_SHOW_MAIN_WINDOW_ON_READY.swap(false, Ordering::Relaxed) {
+                    log::info!("Frontend reported ready; showing main window");
+                    show_main_window(&app_handle_for_ready);
+                }
+            });
+
             initialize_core_logic(&app_handle)?;
+
+            // Run WMI GPU/NPU hardware detection in background so it never
+            // blocks startup. The result is persisted to the settings store
+            // and will be available to the model preload thread (which waits 4s).
+            {
+                let app_handle_bg = app_handle.clone();
+                thread::spawn(move || {
+                    refresh_adaptive_profile_if_needed(&app_handle_bg);
+                });
+            }
 
             // Hide tray icon if --no-tray was passed
             if cli_args.no_tray {
                 tray::set_tray_visibility(&app_handle, false);
             }
 
-            // Show main window only if not starting hidden
-            // CLI --start-hidden flag overrides the setting
-            let should_hide = settings.start_hidden || cli_args.start_hidden;
+            // Show the main window only after the frontend confirms it has
+            // painted. This avoids the black WebView flash that happens when
+            // the native window is made visible too early.
+            // In debug, prefer a visible window unless the CLI explicitly asked
+            // for a hidden launch. This keeps `tauri dev` from becoming
+            // inaccessible because of a persisted user preference.
+            let should_hide = if cfg!(debug_assertions) {
+                cli_args.start_hidden
+            } else {
+                settings.start_hidden || cli_args.start_hidden
+            };
 
-            // If start_hidden but tray is disabled, we must show the window
-            // anyway. Without a tray icon, the dock is the only way back in.
-            let tray_available = settings.show_tray_icon && !cli_args.no_tray;
+            if cfg!(debug_assertions) && settings.start_hidden && !cli_args.start_hidden {
+                log::info!(
+                    "Ignoring persisted start_hidden during debug launch so the main window stays accessible"
+                );
+            }
+
+            // If start_hidden but tray is disabled or failed to initialize, we
+            // must show the window anyway. Otherwise the app becomes inaccessible.
+            let tray_available = settings.show_tray_icon
+                && !cli_args.no_tray
+                && TRAY_ICON_READY.load(Ordering::Relaxed);
+            if !tray_available && (settings.start_hidden || cli_args.start_hidden) {
+                log::warn!(
+                    "Tray unavailable while launch requested hidden; forcing main window visible"
+                );
+            }
             if !should_hide || !tray_available {
-                if let Some(main_window) = app_handle.get_webview_window("main") {
-                    if let Err(err) = main_window.show() {
-                        log::error!("Failed to show main window during setup: {}", err);
-                    }
-                    if let Err(err) = main_window.set_focus() {
-                        log::error!("Failed to focus main window during setup: {}", err);
-                    }
+                SHOULD_SHOW_MAIN_WINDOW_ON_READY.store(true, Ordering::Relaxed);
+
+                log::info!(
+                    "Showing the main window immediately at startup so the WebView can paint"
+                );
+                show_main_window(&app_handle);
+
+                #[cfg(target_os = "windows")]
+                if force_show_native_main_window() {
+                    log::info!("Native Windows startup show confirmed the main window is visible");
                 }
+
+                let fallback_app_handle = app_handle.clone();
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_secs(6));
+                    if SHOULD_SHOW_MAIN_WINDOW_ON_READY.swap(false, Ordering::Relaxed) {
+                        log::warn!(
+                            "Frontend-ready signal did not arrive in time; using delayed startup fallback for the main window"
+                        );
+                        show_main_window(&fallback_app_handle);
+
+                        #[cfg(target_os = "windows")]
+                        if force_show_native_main_window() {
+                            log::warn!(
+                                "Delayed startup fallback recovered the main window using native Windows APIs"
+                            );
+                        }
+                    }
+                });
             }
 
             Ok(())

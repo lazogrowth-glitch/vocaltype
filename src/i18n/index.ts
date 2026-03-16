@@ -3,6 +3,7 @@ import { initReactI18next } from "react-i18next";
 import { locale } from "@tauri-apps/plugin-os";
 import { LANGUAGE_METADATA } from "./languages";
 import { commands } from "@/bindings";
+import { hasTauriRuntime } from "@/lib/tauri/runtime";
 import {
   getLanguageDirection,
   updateDocumentDirection,
@@ -87,6 +88,10 @@ i18n.use(initReactI18next).init({
 
 // Sync language from app settings
 export const syncLanguageFromSettings = async () => {
+  if (!hasTauriRuntime()) {
+    return;
+  }
+
   try {
     const result = await commands.getAppSettings();
     if (result.status === "ok" && result.data.app_language) {
@@ -106,9 +111,6 @@ export const syncLanguageFromSettings = async () => {
     console.warn("Failed to sync language from settings:", e);
   }
 };
-
-// Run language sync on init
-syncLanguageFromSettings();
 
 // Listen for language changes to update HTML dir and lang attributes
 i18n.on("languageChanged", (lng) => {
