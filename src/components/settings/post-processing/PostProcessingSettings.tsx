@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useTranslation } from "react-i18next";
+import { Trans, useTranslation } from "react-i18next";
 import { commands } from "@/bindings";
 import { Sparkles } from "lucide-react";
 
@@ -279,12 +279,12 @@ const PostProcessingActionsComponent: React.FC = () => {
                   "settings.postProcessing.actions.promptPlaceholder",
                 )}
               />
-              <p
-                className="text-xs text-mid-gray/70"
-                dangerouslySetInnerHTML={{
-                  __html: t("settings.postProcessing.actions.promptTip"),
-                }}
-              />
+              <p className="text-xs text-mid-gray/70">
+                <Trans
+                  i18nKey="settings.postProcessing.actions.promptTip"
+                  components={{ code: <code /> }}
+                />
+              </p>
             </div>
 
             <div className="space-y-1 flex flex-col">

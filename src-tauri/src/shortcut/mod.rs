@@ -882,7 +882,12 @@ pub fn change_external_script_path_setting(
     path: Option<String>,
 ) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
-    settings.external_script_path = path;
+    settings.external_script_path = match path {
+        Some(path) if !path.trim().is_empty() => {
+            Some(settings::validate_external_script_path(&app, &path)?)
+        }
+        _ => None,
+    };
     settings::write_settings(&app, settings);
     Ok(())
 }
@@ -990,7 +995,7 @@ pub fn change_post_process_base_url_setting(
         ));
     }
 
-    provider.base_url = base_url;
+    provider.base_url = settings::sanitize_custom_provider_base_url(&base_url)?;
     settings::write_settings(&app, settings);
     Ok(())
 }
@@ -1019,7 +1024,10 @@ pub fn change_post_process_api_key_setting(
 ) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     validate_provider_exists(&settings, &provider_id)?;
-    settings.post_process_api_keys.insert(provider_id, api_key);
+    crate::secrets::store_post_process_api_key(&provider_id, &api_key)?;
+    settings
+        .post_process_api_keys
+        .insert(provider_id, String::new());
     settings::write_settings(&app, settings);
     Ok(())
 }

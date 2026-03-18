@@ -728,7 +728,7 @@
       "email": "Email",
       "emailPlaceholder": "you@example.com",
       "password": "Password",
-      "passwordPlaceholder": "Minimum 6 characters"
+      "passwordPlaceholder": "Minimum 12 characters"
     },
     "access": {
       "active": "Subscription active",

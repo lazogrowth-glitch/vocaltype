@@ -6,6 +6,7 @@ import type {
   ResetPasswordPayload,
 } from "./types";
 import { load } from "@tauri-apps/plugin-store";
+import { invoke } from "@tauri-apps/api/core";
 
 const AUTH_TOKEN_KEY = "vocaltype.auth.token";
 const AUTH_SESSION_KEY = "vocaltype.auth.session";
@@ -14,6 +15,10 @@ const DEVICE_REGISTERED_KEY = "vocaltype.device.registered";
 // Stores the set of emails that have already been registered on this device.
 const REGISTERED_EMAILS_KEY = "vocaltype.device.registered_emails";
 const AUTH_STORE_FILE = "auth.store.json";
+
+type PersistedAuthSession = Omit<AuthSession, "token"> & {
+  token?: string | null;
+};
 
 let cachedToken: string | null = null;
 let cachedSession: AuthSession | null = null;
@@ -43,33 +48,90 @@ const getAuthStore = () => {
   return storePromise;
 };
 
-const readLegacyLocalToken = () => {
-  try {
-    return localStorage.getItem(AUTH_TOKEN_KEY);
-  } catch {
-    return null;
-  }
-};
-
-const readLegacyLocalSession = () => {
-  try {
-    const raw = localStorage.getItem(AUTH_SESSION_KEY);
-    if (!raw) {
-      return null;
-    }
-
-    return JSON.parse(raw) as AuthSession;
-  } catch {
-    return null;
-  }
-};
-
 const clearLegacyLocalAuth = () => {
   try {
     localStorage.removeItem(AUTH_TOKEN_KEY);
     localStorage.removeItem(AUTH_SESSION_KEY);
   } catch {
     // Ignore localStorage access failures in non-browser contexts.
+  }
+};
+
+const sanitizeSessionForPersistence = (
+  session: AuthSession | PersistedAuthSession,
+): PersistedAuthSession => ({
+  ...session,
+  token: null,
+});
+
+const hydratePersistedSession = (
+  session: PersistedAuthSession | null,
+  token: string | null,
+): AuthSession | null => {
+  if (!session || !token) {
+    return null;
+  }
+
+  return {
+    ...session,
+    token,
+  };
+};
+
+const readPersistedSessionToken = (
+  session: PersistedAuthSession | null,
+): string | null => {
+  if (!session || typeof session.token !== "string") {
+    return null;
+  }
+
+  const token = session.token.trim();
+  return token ? token : null;
+};
+
+const loadSecureStoredToken = async (): Promise<string | null> => {
+  try {
+    const token = await invoke<string | null>("load_secure_auth_token");
+    return typeof token === "string" && token.trim() ? token : null;
+  } catch (error) {
+    console.warn("Failed to load secure auth token:", error);
+    return null;
+  }
+};
+
+const persistSecureStoredToken = async (token: string): Promise<boolean> => {
+  try {
+    await invoke("store_secure_auth_token", { token });
+    return true;
+  } catch (error) {
+    console.warn("Failed to store secure auth token:", error);
+    return false;
+  }
+};
+
+const clearSecureStoredToken = async (): Promise<void> => {
+  try {
+    await invoke("clear_secure_auth_token");
+  } catch (error) {
+    console.warn("Failed to clear secure auth token:", error);
+  }
+};
+
+const MACHINE_DEVICE_ID_LENGTH = 64;
+
+const isStableMachineDeviceId = (value: string | null | undefined): boolean =>
+  typeof value === "string" &&
+  /^[a-f0-9]{64}$/i.test(value.trim()) &&
+  value.trim().length === MACHINE_DEVICE_ID_LENGTH;
+
+const loadMachineDeviceId = async (): Promise<string | null> => {
+  try {
+    const deviceId = await invoke<string>("get_machine_device_id");
+    const normalized = deviceId.trim().toLowerCase();
+    return isStableMachineDeviceId(normalized) ? normalized : null;
+  } catch (error) {
+    console.warn("Failed to load machine device ID:", error);
+    return null;
   }
 };
 
@@ -136,8 +198,19 @@ export const authClient = {
     try {
       const store = await getAuthStore();
       const stored = await store.get<string>(DEVICE_ID_KEY);
+      const stableMachineDeviceId = await loadMachineDeviceId();
+
+      if (stableMachineDeviceId) {
+        cachedDeviceId = stableMachineDeviceId;
+        if (stored !== stableMachineDeviceId) {
+          await store.set(DEVICE_ID_KEY, stableMachineDeviceId);
+          await store.save();
+        }
+        return cachedDeviceId;
+      }
+
       if (typeof stored === "string" && stored.trim()) {
-        cachedDeviceId = stored;
+        cachedDeviceId = stored.trim();
         return cachedDeviceId;
       }
     } catch {
@@ -232,30 +305,40 @@ export const authClient = {
       return cachedToken;
     }
 
-    const legacyToken = readLegacyLocalToken();
-
     try {
       const store = await getAuthStore();
       const storedToken = await store.get<string>(AUTH_TOKEN_KEY);
-      const resolvedToken =
+      const persistedStoreToken =
         typeof storedToken === "string" && storedToken.trim()
           ? storedToken
-          : legacyToken;
+          : null;
+      const secureToken = await loadSecureStoredToken();
+      const resolvedToken =
+        secureToken ?? persistedStoreToken;
 
       cachedToken = resolvedToken ?? null;
 
-      if (!storedToken && legacyToken) {
-        await store.set(AUTH_TOKEN_KEY, legacyToken);
-        await store.save();
+      let shouldSaveStore = false;
+      let hasSecureToken = Boolean(secureToken);
+
+      if (!hasSecureToken && resolvedToken) {
+        hasSecureToken = await persistSecureStoredToken(resolvedToken);
       }
 
-      clearLegacyLocalAuth();
+      if (hasSecureToken && persistedStoreToken) {
+        await store.delete(AUTH_TOKEN_KEY);
+        shouldSaveStore = true;
+      }
+
+      if (shouldSaveStore) {
+        await store.save();
+      }
     } catch (error) {
       console.warn(
         "Failed to hydrate auth token from persistent store:",
         error,
       );
-      cachedToken = legacyToken;
+      cachedToken = null;
     }
 
     hasHydratedToken = true;
@@ -265,17 +348,38 @@ export const authClient = {
   async hydrateStoredSession() {
     await this.hydrateStoredToken();
 
-    const legacySession = readLegacyLocalSession();
-
     try {
       const store = await getAuthStore();
-      const storedSession = await store.get<AuthSession>(AUTH_SESSION_KEY);
-      const resolvedSession = storedSession ?? legacySession;
+      const storedSession =
+        (await store.get<PersistedAuthSession>(
+          AUTH_SESSION_KEY,
+        )) ?? null;
+      const secureToken = await loadSecureStoredToken();
+      if (secureToken) {
+        cachedToken = secureToken;
+      }
 
-      cachedSession = resolvedSession ?? null;
+      const persistedSession = storedSession
+        ? sanitizeSessionForPersistence(storedSession)
+        : null;
+      const migratedSessionToken = readPersistedSessionToken(storedSession);
 
-      if (!storedSession && legacySession) {
-        await store.set(AUTH_SESSION_KEY, legacySession);
+      let hasSecureToken = Boolean(cachedToken);
+      if (!hasSecureToken && migratedSessionToken) {
+        hasSecureToken = await persistSecureStoredToken(migratedSessionToken);
+        if (hasSecureToken) {
+          cachedToken = migratedSessionToken;
+        }
+      }
+
+      cachedSession = hydratePersistedSession(persistedSession, cachedToken);
+
+      const shouldRewriteStoredSession =
+        Boolean(persistedSession) &&
+        (!storedSession || (hasSecureToken && Boolean(migratedSessionToken)));
+
+      if (persistedSession && shouldRewriteStoredSession) {
+        await store.set(AUTH_SESSION_KEY, persistedSession);
         await store.save();
       }
 
@@ -285,7 +389,7 @@ export const authClient = {
         "Failed to hydrate auth session from persistent store:",
         error,
       );
-      cachedSession = legacySession;
+      cachedSession = null;
     }
 
     return cachedSession;
@@ -305,7 +409,7 @@ export const authClient = {
 
     try {
       const store = await getAuthStore();
-      await store.set(AUTH_SESSION_KEY, session);
+      await store.set(AUTH_SESSION_KEY, sanitizeSessionForPersistence(session));
       await store.save();
     } catch (error) {
       console.warn("Failed to persist auth session:", error);
@@ -318,8 +422,10 @@ export const authClient = {
     clearLegacyLocalAuth();
 
     try {
+      await persistSecureStoredToken(token);
+
       const store = await getAuthStore();
-      await store.set(AUTH_TOKEN_KEY, token);
+      await store.delete(AUTH_TOKEN_KEY);
       await store.save();
     } catch (error) {
       console.warn("Failed to persist auth token:", error);
@@ -346,6 +452,8 @@ export const authClient = {
     clearLegacyLocalAuth();
 
     try {
+      await clearSecureStoredToken();
+
       const store = await getAuthStore();
       await store.delete(AUTH_TOKEN_KEY);
       await store.save();

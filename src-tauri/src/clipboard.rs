@@ -508,20 +508,31 @@ fn send_key_combo_via_xdotool(paste_method: &PasteMethod) -> Result<(), String> 
 
 /// Pastes text by invoking an external script.
 /// The script receives the text to paste as a single argument.
-fn paste_via_external_script(text: &str, script_path: &str) -> Result<(), String> {
+fn paste_via_external_script(
+    text: &str,
+    script_path: &str,
+    app_handle: &AppHandle,
+) -> Result<(), String> {
+    let validated_script_path =
+        crate::settings::validate_external_script_path(app_handle, script_path)?;
     info!("Pasting via external script: {}", script_path);
 
-    let output = Command::new(script_path)
+    let output = Command::new(&validated_script_path)
         .arg(text)
         .output()
-        .map_err(|e| format!("Failed to execute external script '{}': {}", script_path, e))?;
+        .map_err(|e| {
+            format!(
+                "Failed to execute external script '{}': {}",
+                validated_script_path, e
+            )
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
         return Err(format!(
             "External script '{}' failed with exit code {:?}. stderr: {}, stdout: {}",
-            script_path,
+            validated_script_path,
             output.status.code(),
             stderr.trim(),
             stdout.trim()
@@ -656,7 +667,7 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
                 .as_ref()
                 .filter(|p| !p.is_empty())
                 .ok_or("External script path is not configured")?;
-            paste_via_external_script(&text, script_path)?;
+            paste_via_external_script(&text, script_path, &app_handle)?;
         }
     }
 

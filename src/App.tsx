@@ -112,20 +112,22 @@ function App() {
     refreshSession();
   }, [refreshSession]);
 
-  // Refresh session every 30 minutes while the app is open to keep the token alive.
-  // If the backend issues a new token on each getSession call, this extends the lifetime.
+  // Refresh the short-lived access token periodically while the app stays open.
   useEffect(() => {
-    const THIRTY_MINUTES = 30 * 60 * 1000;
+    const FIVE_MINUTES = 5 * 60 * 1000;
     const interval = setInterval(() => {
       const token = authClient.getStoredToken();
       if (!token) return;
       authClient
         .getSession(token)
         .then((nextSession) => applySession(nextSession))
-        .catch(() => {
-          // Silently ignore refresh errors — the next app start will handle it
+        .catch((error) => {
+          const status = authClient.getErrorStatus(error);
+          if (status === 401 || status === 403) {
+            applySession(null);
+          }
         });
-    }, THIRTY_MINUTES);
+    }, FIVE_MINUTES);
     return () => clearInterval(interval);
   }, [applySession]);
 
