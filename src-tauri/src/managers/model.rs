@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::File;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -52,6 +52,7 @@ pub struct ModelInfo {
     pub description: String,
     pub filename: String,
     pub url: Option<String>,
+    pub expected_etag: Option<String>,
     pub size_mb: u64,
     pub is_downloaded: bool,
     pub is_downloading: bool,
@@ -83,6 +84,67 @@ pub struct ModelManager {
 }
 
 impl ModelManager {
+    fn verify_response_etag(model_info: &ModelInfo, response: &reqwest::Response) -> Result<()> {
+        let Some(expected_etag) = model_info.expected_etag.as_deref() else {
+            return Ok(());
+        };
+
+        let actual_etag = response
+            .headers()
+            .get(reqwest::header::ETAG)
+            .and_then(|value| value.to_str().ok())
+            .ok_or_else(|| anyhow::anyhow!("Missing ETag header for {}", model_info.id))?;
+
+        if actual_etag.trim() != expected_etag {
+            anyhow::bail!(
+                "ETag mismatch for {}: expected {}, got {}",
+                model_info.id,
+                expected_etag,
+                actual_etag
+            );
+        }
+
+        Ok(())
+    }
+
+    fn extract_archive_safely(archive: &mut Archive<GzDecoder<File>>, destination: &Path) -> Result<()> {
+        for entry_result in archive.entries()? {
+            let mut entry = entry_result?;
+            let entry_path = entry.path()?.into_owned();
+
+            if entry_path.as_os_str().is_empty() {
+                continue;
+            }
+
+            if !entry_path
+                .components()
+                .all(|component| matches!(component, Component::Normal(_)))
+            {
+                anyhow::bail!(
+                    "archive contains an unsafe path '{}'",
+                    entry_path.display()
+                );
+            }
+
+            let entry_type = entry.header().entry_type();
+            if entry_type.is_symlink() || entry_type.is_hard_link() {
+                anyhow::bail!(
+                    "archive contains unsupported link entry '{}'",
+                    entry_path.display()
+                );
+            }
+
+            if !entry.unpack_in(destination)? {
+                anyhow::bail!(
+                    "archive entry escaped extraction directory '{}'",
+                    entry_path.display()
+                );
+            }
+        }
+
+        Ok(())
+    }
+
     fn recommended_model_ids_from_settings(settings: &crate::settings::AppSettings) -> Vec<String> {
         let mut ids = Vec::new();
         if let Some(profile) = settings.adaptive_machine_profile.as_ref() {
@@ -190,6 +252,7 @@ impl ModelManager {
                     .to_string(),
                 filename: "ggml-small.bin".to_string(),
                 url: Some(format!("{}/ggml-small.bin", MODEL_ASSET_BASE_URL)),
+                expected_etag: Some("\"2d0c354f4c52214378fd483d072e31f7-47\"".to_string()),
                 size_mb: 487,
                 is_downloaded: false,
                 is_downloading: false,
@@ -215,6 +278,7 @@ impl ModelManager {
                     .to_string(),
                 filename: "whisper-medium-q4_1.bin".to_string(),
                 url: Some(format!("{}/whisper-medium-q4_1.bin", MODEL_ASSET_BASE_URL)),
+                expected_etag: Some("\"f3487c328e59a6682ca2d62a73bfdc93-47\"".to_string()),
                 size_mb: 492,
                 is_downloaded: false,
                 is_downloading: false,
@@ -240,6 +304,7 @@ impl ModelManager {
                         .to_string(),
                 filename: "ggml-large-v3-turbo.bin".to_string(),
                 url: Some(format!("{}/ggml-large-v3-turbo.bin", MODEL_ASSET_BASE_URL)),
+                expected_etag: Some("\"9b323017f695306d9b3ae14c81ae9f53-155\"".to_string()),
                 size_mb: 1600,
                 is_downloaded: false,
                 is_downloading: false,
@@ -265,6 +330,7 @@ impl ModelManager {
                         .to_string(),
                 filename: "ggml-large-v3-q5_0.bin".to_string(),
                 url: Some(format!("{}/ggml-large-v3-q5_0.bin", MODEL_ASSET_BASE_URL)),
+                expected_etag: Some("\"801554aa60d64311c5cce767324e1ccf-104\"".to_string()),
                 size_mb: 1100,
                 is_downloaded: false,
                 is_downloading: false,
@@ -290,6 +356,7 @@ impl ModelManager {
                         .to_string(),
                 filename: "breeze-asr-q5_k.bin".to_string(),
                 url: Some(format!("{}/breeze-asr-q5_k.bin", MODEL_ASSET_BASE_URL)),
+                expected_etag: Some("\"8f6ecacc11a66c526f45ba053718f32f-104\"".to_string()),
                 size_mb: 1080,
                 is_downloaded: false,
                 is_downloading: false,
@@ -316,6 +383,7 @@ impl ModelManager {
                         .to_string(),
                 filename: "parakeet-tdt-0.6b-v2-int8".to_string(),
                 url: Some(format!("{}/parakeet-v2-int8.tar.gz", MODEL_ASSET_BASE_URL)),
+                expected_etag: Some("\"75e6c93ded6e4ad29ea5259a3ec33a26-46\"".to_string()),
                 size_mb: 473,
                 is_downloaded: false,
                 is_downloading: false,
@@ -351,6 +419,7 @@ impl ModelManager {
                         .to_string(),
                 filename: "parakeet-tdt-0.6b-v3-int8".to_string(),
                 url: Some(format!("{}/parakeet-v3-int8.tar.gz", MODEL_ASSET_BASE_URL)),
+                expected_etag: Some("\"d7a7b2d3f0780d1e0df427e64cff1b32-46\"".to_string()),
                 size_mb: 478,
                 is_downloaded: false,
                 is_downloading: false,
@@ -376,6 +445,7 @@ impl ModelManager {
                         .to_string(),
                 filename: "parakeet-tdt-0.6b-v3-int8".to_string(),
                 url: Some(format!("{}/parakeet-v3-int8.tar.gz", MODEL_ASSET_BASE_URL)),
+                expected_etag: Some("\"d7a7b2d3f0780d1e0df427e64cff1b32-46\"".to_string()),
                 size_mb: 478,
                 is_downloaded: false,
                 is_downloading: false,
@@ -403,6 +473,7 @@ impl ModelManager {
                         .to_string(),
                 filename: "parakeet-tdt-0.6b-v3-int8".to_string(),
                 url: Some(format!("{}/parakeet-v3-int8.tar.gz", MODEL_ASSET_BASE_URL)),
+                expected_etag: Some("\"d7a7b2d3f0780d1e0df427e64cff1b32-46\"".to_string()),
                 size_mb: 478,
                 is_downloaded: false,
                 is_downloading: false,
@@ -428,6 +499,7 @@ impl ModelManager {
                         .to_string(),
                 filename: "moonshine-base".to_string(),
                 url: Some(format!("{}/moonshine-base.tar.gz", MODEL_ASSET_BASE_URL)),
+                expected_etag: Some("\"eab43e82c3091b5876b06e524d1d699c\"".to_string()),
                 size_mb: 58,
                 is_downloaded: false,
                 is_downloading: false,
@@ -456,6 +528,7 @@ impl ModelManager {
                     "{}/moonshine-tiny-streaming-en.tar.gz",
                     MODEL_ASSET_BASE_URL
                 )),
+                expected_etag: Some("\"f39cd7754edc9565623c362b96046b4e\"".to_string()),
                 size_mb: 31,
                 is_downloaded: false,
                 is_downloading: false,
@@ -484,6 +557,7 @@ impl ModelManager {
                     "{}/moonshine-small-streaming-en.tar.gz",
                     MODEL_ASSET_BASE_URL
                 )),
+                expected_etag: Some("\"6c7847d0051f9e8d5aca42b7d40ea564\"".to_string()),
                 size_mb: 100,
                 is_downloaded: false,
                 is_downloading: false,
@@ -512,6 +586,7 @@ impl ModelManager {
                     "{}/moonshine-medium-streaming-en.tar.gz",
                     MODEL_ASSET_BASE_URL
                 )),
+                expected_etag: Some("\"e9978755cccaa013155922c157587a16-20\"".to_string()),
                 size_mb: 192,
                 is_downloaded: false,
                 is_downloading: false,
@@ -544,6 +619,7 @@ impl ModelManager {
                         .to_string(),
                 filename: "sense-voice-int8".to_string(),
                 url: Some(format!("{}/sense-voice-int8.tar.gz", MODEL_ASSET_BASE_URL)),
+                expected_etag: Some("\"910e819ffba40d39f515112d174452b6-16\"".to_string()),
                 size_mb: 160,
                 is_downloaded: false,
                 is_downloading: false,
@@ -569,6 +645,7 @@ impl ModelManager {
                         .to_string(),
                 filename: "".to_string(),
                 url: None,
+                expected_etag: None,
                 size_mb: 0,
                 is_downloaded: true,
                 is_downloading: false,
@@ -885,6 +962,7 @@ impl ModelManager {
                     description: "Not officially supported".to_string(),
                     filename,
                     url: None, // Custom models have no download URL
+                    expected_etag: None,
                     size_mb,
                     is_downloaded: true, // Already present on disk
                     is_downloading: false,
@@ -919,6 +997,7 @@ impl ModelManager {
 
         let url = model_info
             .url
+            .clone()
             .ok_or_else(|| anyhow::anyhow!("No download URL for model"))?;
         let model_path = self.models_dir.join(&model_info.filename);
         let partial_path = self
@@ -988,6 +1067,12 @@ impl ModelManager {
         }
 
         let mut response = request.send().await?;
+        if let Err(err) = Self::verify_response_etag(&model_info, &response) {
+            self.set_downloading_state_for_filename(&model_info.filename, false);
+            let mut flags = self.cancel_flags.lock().unwrap();
+            flags.remove(model_id);
+            return Err(err);
+        }
 
         // If we tried to resume but server returned 200 (not 206 Partial Content),
         // the server doesn't support range requests. Delete partial file and restart
@@ -1005,6 +1090,12 @@ impl ModelManager {
 
             // Restart download without range header
             response = client.get(&url).send().await?;
+            if let Err(err) = Self::verify_response_etag(&model_info, &response) {
+                self.set_downloading_state_for_filename(&model_info.filename, false);
+                let mut flags = self.cancel_flags.lock().unwrap();
+                flags.remove(model_id);
+                return Err(err);
+            }
         }
 
         // Check for success or partial content status
@@ -1172,7 +1263,7 @@ impl ModelManager {
             let mut archive = Archive::new(tar);
 
             // Extract to the temporary directory first
-            archive.unpack(&temp_extract_dir).map_err(|e| {
+            Self::extract_archive_safely(&mut archive, &temp_extract_dir).map_err(|e| {
                 let error_msg = format!("Failed to extract archive: {}", e);
                 // Clean up failed extraction
                 let _ = fs::remove_dir_all(&temp_extract_dir);
@@ -1445,7 +1536,11 @@ impl ModelManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flate2::write::GzEncoder;
+    use flate2::Compression;
+    use std::fs;
     use std::io::Write;
+    use tar::Builder;
     use tempfile::TempDir;
 
     #[test]
@@ -1476,6 +1571,7 @@ mod tests {
                 description: "Test".to_string(),
                 filename: "ggml-small.bin".to_string(),
                 url: Some("https://example.com".to_string()),
+                expected_etag: None,
                 size_mb: 100,
                 is_downloaded: false,
                 is_downloading: false,
@@ -1544,5 +1640,36 @@ mod tests {
         let result = ModelManager::discover_custom_whisper_models(&models_dir, &mut models);
         assert!(result.is_ok());
         assert_eq!(models.len(), count_before);
+    }
+
+    #[test]
+    fn extract_archive_safely_rejects_symlink_entries() {
+        let temp_dir = TempDir::new().unwrap();
+        let archive_path = temp_dir.path().join("unsafe.tar.gz");
+        let destination = temp_dir.path().join("extract");
+        fs::create_dir_all(&destination).unwrap();
+
+        let archive_file = File::create(&archive_path).unwrap();
+        let encoder = GzEncoder::new(archive_file, Compression::default());
+        let mut builder = Builder::new(encoder);
+
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Symlink);
+        header.set_size(0);
+        header.set_mode(0o777);
+        header.set_cksum();
+        builder
+            .append_link(&mut header, "model-link", "outside-target")
+            .unwrap();
+        let encoder = builder.into_inner().unwrap();
+        encoder.finish().unwrap();
+
+        let archive_file = File::open(&archive_path).unwrap();
+        let decoder = GzDecoder::new(archive_file);
+        let mut archive = Archive::new(decoder);
+
+        let err = ModelManager::extract_archive_safely(&mut archive, &destination).unwrap_err();
+        assert!(err.to_string().contains("unsupported link entry"));
+        assert!(!destination.join("model-link").exists());
     }
 }

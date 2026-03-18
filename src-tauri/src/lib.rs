@@ -16,6 +16,7 @@ mod managers;
 mod overlay;
 mod prompt_builder;
 mod runtime_observability;
+mod secret_store;
 mod settings;
 mod shortcut;
 mod signal_handle;
@@ -569,6 +570,12 @@ pub fn run(cli_args: CliArgs) {
         commands::history::reprocess_history_entry,
         commands::gemini::change_gemini_api_key_setting,
         commands::gemini::change_gemini_model_setting,
+        secret_store::get_secure_auth_token,
+        secret_store::set_secure_auth_token,
+        secret_store::clear_secure_auth_token,
+        secret_store::get_secure_auth_session,
+        secret_store::set_secure_auth_session,
+        secret_store::clear_secure_auth_session,
         helpers::clamshell::is_laptop,
     ]);
 

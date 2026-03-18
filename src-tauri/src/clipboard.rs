@@ -4,6 +4,7 @@ use crate::settings::TypingTool;
 use crate::settings::{get_settings, AutoSubmitKey, ClipboardHandling, PasteMethod};
 use enigo::{Direction, Enigo, Key, Keyboard};
 use log::info;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
@@ -508,20 +509,54 @@ fn send_key_combo_via_xdotool(paste_method: &PasteMethod) -> Result<(), String> 
 
 /// Pastes text by invoking an external script.
 /// The script receives the text to paste as a single argument.
-fn paste_via_external_script(text: &str, script_path: &str) -> Result<(), String> {
-    info!("Pasting via external script: {}", script_path);
+pub(crate) fn validate_external_script_path(script_path: &str) -> Result<PathBuf, String> {
+    let candidate = Path::new(script_path);
+    if !candidate.is_absolute() {
+        return Err("External script path must be absolute".to_string());
+    }
 
-    let output = Command::new(script_path)
+    let canonical = std::fs::canonicalize(candidate)
+        .map_err(|e| format!("Failed to resolve external script path '{}': {}", script_path, e))?;
+    let metadata = std::fs::metadata(&canonical)
+        .map_err(|e| format!("Failed to read external script metadata '{}': {}", script_path, e))?;
+
+    if !metadata.is_file() {
+        return Err("External script path must point to a file".to_string());
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if metadata.permissions().mode() & 0o111 == 0 {
+            return Err("External script must be executable".to_string());
+        }
+    }
+
+    Ok(canonical)
+}
+
+fn paste_via_external_script(text: &str, script_path: &str) -> Result<(), String> {
+    let canonical = validate_external_script_path(script_path)?;
+
+    info!("Pasting via external script: {}", canonical.display());
+
+    let output = Command::new(&canonical)
         .arg(text)
         .output()
-        .map_err(|e| format!("Failed to execute external script '{}': {}", script_path, e))?;
+        .map_err(|e| {
+            format!(
+                "Failed to execute external script '{}': {}",
+                canonical.display(),
+                e
+            )
+        })?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
         return Err(format!(
             "External script '{}' failed with exit code {:?}. stderr: {}, stdout: {}",
-            script_path,
+            canonical.display(),
             output.status.code(),
             stderr.trim(),
             stdout.trim()
@@ -680,6 +715,8 @@ pub fn paste(text: String, app_handle: AppHandle) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use tempfile::TempDir;
 
     #[test]
     fn auto_submit_requires_setting_enabled() {
@@ -734,5 +771,30 @@ mod tests {
             PasteMethod::Direct,
             ClipboardHandling::DontModify
         ));
+    }
+
+    #[test]
+    fn external_script_validation_rejects_relative_paths() {
+        let err = validate_external_script_path("scripts/paste-helper").unwrap_err();
+        assert!(err.contains("must be absolute"));
+    }
+
+    #[test]
+    fn external_script_validation_rejects_directories() {
+        let temp_dir = TempDir::new().unwrap();
+        let dir_path = temp_dir.path().to_string_lossy().to_string();
+
+        let err = validate_external_script_path(&dir_path).unwrap_err();
+        assert!(err.contains("must point to a file"));
+    }
+
+    #[test]
+    fn external_script_validation_accepts_existing_file() {
+        let temp_dir = TempDir::new().unwrap();
+        let script_path = temp_dir.path().join("paste-helper.cmd");
+        fs::write(&script_path, "@echo off\r\n").unwrap();
+
+        let canonical = validate_external_script_path(script_path.to_str().unwrap()).unwrap();
+        assert_eq!(canonical, fs::canonicalize(script_path).unwrap());
     }
 }

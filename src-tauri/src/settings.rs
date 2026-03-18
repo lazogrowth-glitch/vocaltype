@@ -2091,6 +2091,93 @@ fn persist_store(store: &impl Deref<Target = tauri_plugin_store::Store<tauri::Wr
     }
 }
 
+fn migrate_secret_to_secure_store(
+    secure_value: Option<String>,
+    legacy_value: Option<&str>,
+    set_secret: impl Fn(&str) -> Result<(), String>,
+) -> Option<String> {
+    if let Some(value) = secure_value {
+        return Some(value);
+    }
+
+    let legacy_value = legacy_value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned);
+
+    if let Some(value) = legacy_value.as_deref() {
+        if let Err(err) = set_secret(value) {
+            warn!("Failed to migrate legacy secret into secure store: {}", err);
+        }
+    }
+
+    legacy_value
+}
+
+fn hydrate_settings_secrets(app: &AppHandle, settings: &mut AppSettings) {
+    settings.gemini_api_key = migrate_secret_to_secure_store(
+        crate::secret_store::get_gemini_api_key()
+            .map_err(|err| {
+                warn!("Failed to load Gemini API key from secure store: {}", err);
+                err
+            })
+            .ok()
+            .flatten(),
+        settings.gemini_api_key.as_deref(),
+        crate::secret_store::set_gemini_api_key,
+    );
+
+    let provider_ids: Vec<String> = settings
+        .post_process_providers
+        .iter()
+        .map(|provider| provider.id.clone())
+        .collect();
+
+    for provider_id in provider_ids {
+        let legacy_value = settings.post_process_api_keys.get(&provider_id).cloned();
+        let hydrated_value = migrate_secret_to_secure_store(
+            crate::secret_store::get_post_process_api_key(&provider_id)
+                .map_err(|err| {
+                    warn!(
+                        "Failed to load secure post-process API key for provider '{}': {}",
+                        provider_id, err
+                    );
+                    err
+                })
+                .ok()
+                .flatten(),
+            legacy_value.as_deref(),
+            |value| crate::secret_store::set_post_process_api_key(&provider_id, value),
+        )
+        .unwrap_or_default();
+
+        settings
+            .post_process_api_keys
+            .insert(provider_id, hydrated_value);
+    }
+
+    let _ = app;
+}
+
+fn strip_secrets_for_persistence(mut settings: AppSettings) -> AppSettings {
+    settings.gemini_api_key = None;
+    for value in settings.post_process_api_keys.values_mut() {
+        value.clear();
+    }
+    settings
+}
+
+fn persist_settings_payload(
+    store: &impl Deref<Target = tauri_plugin_store::Store<tauri::Wry>>,
+    settings: &AppSettings,
+) {
+    store.set(
+        "settings",
+        serde_json::to_value(strip_secrets_for_persistence(settings.clone())).unwrap(),
+    );
+    persist_store(store);
+}
+
 pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
     // Initialize store
     let store = app
@@ -2116,8 +2203,7 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
 
                 if updated {
                     debug!("Settings updated with new bindings");
-                    store.set("settings", serde_json::to_value(&settings).unwrap());
-                    persist_store(&store);
+                    persist_settings_payload(&store, &settings);
                 }
 
                 settings
@@ -2126,24 +2212,22 @@ pub fn load_or_create_app_settings(app: &AppHandle) -> AppSettings {
                 warn!("Failed to parse settings: {}", e);
                 // Fall back to default settings if parsing fails
                 let default_settings = get_default_settings();
-                store.set("settings", serde_json::to_value(&default_settings).unwrap());
-                persist_store(&store);
+                persist_settings_payload(&store, &default_settings);
                 default_settings
             }
         }
     } else {
         let default_settings = get_default_settings();
-        store.set("settings", serde_json::to_value(&default_settings).unwrap());
-        persist_store(&store);
+        persist_settings_payload(&store, &default_settings);
         default_settings
     };
 
     let post_process_changed = ensure_post_process_defaults(&mut settings);
     let language_changed = ensure_selected_language_default(&mut settings);
     let adaptive_profile_changed = ensure_adaptive_profile(app, &mut settings);
+    hydrate_settings_secrets(app, &mut settings);
     if post_process_changed || language_changed || adaptive_profile_changed {
-        store.set("settings", serde_json::to_value(&settings).unwrap());
-        persist_store(&store);
+        persist_settings_payload(&store, &settings);
     }
 
     settings
@@ -2157,23 +2241,21 @@ pub fn get_settings(app: &AppHandle) -> AppSettings {
     let mut settings = if let Some(settings_value) = store.get("settings") {
         serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
             let default_settings = get_default_settings();
-            store.set("settings", serde_json::to_value(&default_settings).unwrap());
-            persist_store(&store);
+            persist_settings_payload(&store, &default_settings);
             default_settings
         })
     } else {
         let default_settings = get_default_settings();
-        store.set("settings", serde_json::to_value(&default_settings).unwrap());
-        persist_store(&store);
+        persist_settings_payload(&store, &default_settings);
         default_settings
     };
 
     let post_process_changed = ensure_post_process_defaults(&mut settings);
     let language_changed = ensure_selected_language_default(&mut settings);
     let adaptive_profile_changed = ensure_adaptive_profile(app, &mut settings);
+    hydrate_settings_secrets(app, &mut settings);
     if post_process_changed || language_changed || adaptive_profile_changed {
-        store.set("settings", serde_json::to_value(&settings).unwrap());
-        persist_store(&store);
+        persist_settings_payload(&store, &settings);
     }
 
     settings
@@ -2190,22 +2272,20 @@ pub fn get_settings_fast(app: &AppHandle) -> AppSettings {
     let mut settings = if let Some(settings_value) = store.get("settings") {
         serde_json::from_value::<AppSettings>(settings_value).unwrap_or_else(|_| {
             let default_settings = get_default_settings();
-            store.set("settings", serde_json::to_value(&default_settings).unwrap());
-            persist_store(&store);
+            persist_settings_payload(&store, &default_settings);
             default_settings
         })
     } else {
         let default_settings = get_default_settings();
-        store.set("settings", serde_json::to_value(&default_settings).unwrap());
-        persist_store(&store);
+        persist_settings_payload(&store, &default_settings);
         default_settings
     };
 
     let post_process_changed = ensure_post_process_defaults(&mut settings);
     let language_changed = ensure_selected_language_default(&mut settings);
+    hydrate_settings_secrets(app, &mut settings);
     if post_process_changed || language_changed {
-        store.set("settings", serde_json::to_value(&settings).unwrap());
-        persist_store(&store);
+        persist_settings_payload(&store, &settings);
     }
 
     settings
@@ -2226,9 +2306,9 @@ pub fn refresh_adaptive_profile_if_needed(app: &AppHandle) {
     };
 
     let changed = ensure_adaptive_profile(app, &mut settings);
+    hydrate_settings_secrets(app, &mut settings);
     if changed {
-        store.set("settings", serde_json::to_value(&settings).unwrap());
-        persist_store(&store);
+        persist_settings_payload(&store, &settings);
         log::info!("Adaptive machine profile refreshed in background");
     }
 }
@@ -2238,8 +2318,36 @@ pub fn write_settings(app: &AppHandle, settings: AppSettings) {
         .store(SETTINGS_STORE_PATH)
         .expect("Failed to initialize store");
 
-    store.set("settings", serde_json::to_value(&settings).unwrap());
-    persist_store(&store);
+    match settings.gemini_api_key.as_deref().map(str::trim) {
+        Some(value) if !value.is_empty() => {
+            if let Err(err) = crate::secret_store::set_gemini_api_key(value) {
+                warn!("Failed to persist Gemini API key in secure store: {}", err);
+            }
+        }
+        _ => {
+            if let Err(err) = crate::secret_store::clear_gemini_api_key() {
+                warn!("Failed to clear Gemini API key from secure store: {}", err);
+            }
+        }
+    }
+
+    for (provider_id, api_key) in &settings.post_process_api_keys {
+        let trimmed = api_key.trim();
+        let result = if trimmed.is_empty() {
+            crate::secret_store::clear_post_process_api_key(provider_id)
+        } else {
+            crate::secret_store::set_post_process_api_key(provider_id, trimmed)
+        };
+
+        if let Err(err) = result {
+            warn!(
+                "Failed to persist secure post-process API key for provider '{}': {}",
+                provider_id, err
+            );
+        }
+    }
+
+    persist_settings_payload(&store, &settings);
 }
 
 fn whisper_config_mut<'a>(

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Dropdown } from "../ui/Dropdown";
 import { SettingContainer } from "../ui/SettingContainer";
@@ -17,6 +17,7 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
     const { t } = useTranslation();
     const { getSetting, updateSetting, isUpdating } = useSettings();
     const osType = useOsType();
+    const [draftScriptPath, setDraftScriptPath] = useState("");
 
     const getPasteMethodOptions = (osType: string) => {
       const mod = osType === "macos" ? "Cmd" : "Ctrl";
@@ -71,6 +72,15 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
       "ctrl_v") as PasteMethod;
     const externalScriptPath = getSetting("external_script_path") || "";
 
+    useEffect(() => {
+      setDraftScriptPath(externalScriptPath);
+    }, [externalScriptPath]);
+
+    const saveExternalScriptPath = async () => {
+      const trimmed = draftScriptPath.trim();
+      await updateSetting("external_script_path", trimmed || null);
+    };
+
     const pasteMethodOptions = getPasteMethodOptions(osType);
 
     return (
@@ -91,17 +101,27 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
             disabled={isUpdating("paste_method")}
           />
           {selectedMethod === "external_script" && (
-            <Input
-              type="text"
-              value={externalScriptPath}
-              onChange={(e) =>
-                updateSetting("external_script_path", e.target.value)
-              }
-              placeholder={t(
-                "settings.advanced.pasteMethod.externalScriptPlaceholder",
-              )}
-              disabled={isUpdating("external_script_path")}
-            />
+            <>
+              <Input
+                type="text"
+                value={draftScriptPath}
+                onChange={(e) => setDraftScriptPath(e.target.value)}
+                onBlur={() => void saveExternalScriptPath()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    void saveExternalScriptPath();
+                  }
+                }}
+                placeholder={t(
+                  "settings.advanced.pasteMethod.externalScriptPlaceholder",
+                )}
+                disabled={isUpdating("external_script_path")}
+              />
+              <p className="text-xs text-mid-gray/70">
+                External scripts must use an absolute path to an executable
+                local file. Changes are saved on blur or Enter.
+              </p>
+            </>
           )}
         </div>
       </SettingContainer>

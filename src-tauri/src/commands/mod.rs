@@ -138,7 +138,10 @@ pub fn open_app_data_dir(app: AppHandle) -> Result<(), String> {
 #[specta::specta]
 #[tauri::command]
 pub fn export_settings(app: AppHandle, path: String) -> Result<(), String> {
-    let settings = get_settings(&app);
+    let mut settings = get_settings(&app);
+    settings.gemini_api_key = None;
+    settings.external_script_path = None;
+    settings.post_process_api_keys.values_mut().for_each(String::clear);
     let json = serde_json::to_string_pretty(&settings)
         .map_err(|e| format!("Failed to serialize settings: {}", e))?;
     std::fs::write(&path, json).map_err(|e| format!("Failed to write file: {}", e))?;
@@ -150,8 +153,11 @@ pub fn export_settings(app: AppHandle, path: String) -> Result<(), String> {
 #[tauri::command]
 pub fn import_settings(app: AppHandle, path: String) -> Result<(), String> {
     let json = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))?;
-    let settings: AppSettings =
+    let mut settings: AppSettings =
         serde_json::from_str(&json).map_err(|e| format!("Invalid settings file: {}", e))?;
+    settings.gemini_api_key = None;
+    settings.external_script_path = None;
+    settings.post_process_api_keys.values_mut().for_each(String::clear);
     write_settings(&app, settings);
     log::info!("Settings imported from {}", path);
     Ok(())

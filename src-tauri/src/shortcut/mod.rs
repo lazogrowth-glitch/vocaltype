@@ -20,6 +20,7 @@ use std::collections::HashSet;
 use tauri::{AppHandle, Emitter, Manager};
 use tauri_plugin_autostart::ManagerExt;
 
+use crate::clipboard::validate_external_script_path;
 #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
 use crate::settings::APPLE_INTELLIGENCE_DEFAULT_MODEL_ID;
 use crate::settings::{
@@ -882,7 +883,21 @@ pub fn change_external_script_path_setting(
     path: Option<String>,
 ) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
-    settings.external_script_path = path;
+    settings.external_script_path = match path {
+        Some(raw_path) => {
+            let trimmed = raw_path.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(
+                    validate_external_script_path(trimmed)?
+                        .to_string_lossy()
+                        .to_string(),
+                )
+            }
+        }
+        None => None,
+    };
     settings::write_settings(&app, settings);
     Ok(())
 }
