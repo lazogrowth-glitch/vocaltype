@@ -1948,7 +1948,7 @@ fn migrate_plaintext_secrets_to_secure_store(settings: &mut AppSettings) -> bool
         .clone()
         .filter(|value| !value.trim().is_empty() && !is_redacted_secret_placeholder(value))
     {
-        match crate::secrets::store_gemini_api_key(&api_key) {
+        match crate::secret_store::set_gemini_api_key(&api_key) {
             Ok(()) => {
                 settings.gemini_api_key = None;
                 changed = true;
@@ -1965,7 +1965,7 @@ fn migrate_plaintext_secrets_to_secure_store(settings: &mut AppSettings) -> bool
             continue;
         }
 
-        match crate::secrets::store_post_process_api_key(&provider_id, &api_key) {
+        match crate::secret_store::set_post_process_api_key(&provider_id, &api_key) {
             Ok(()) => {
                 if let Some(stored_value) = settings.post_process_api_keys.get_mut(&provider_id) {
                     stored_value.clear();
@@ -1984,7 +1984,10 @@ fn migrate_plaintext_secrets_to_secure_store(settings: &mut AppSettings) -> bool
 
 fn hydrate_secure_secrets(settings: &mut AppSettings) {
     let persisted_gemini_api_key = settings.gemini_api_key.take();
-    settings.gemini_api_key = crate::secrets::load_gemini_api_key().or_else(|| {
+    settings.gemini_api_key = crate::secret_store::get_gemini_api_key()
+        .ok()
+        .flatten()
+        .or_else(|| {
         persisted_gemini_api_key
             .filter(|value| !value.trim().is_empty() && !is_redacted_secret_placeholder(value))
     });
@@ -2006,8 +2009,10 @@ fn hydrate_secure_secrets(settings: &mut AppSettings) {
         } else {
             persisted_value
         };
-        let secure_value =
-            crate::secrets::load_post_process_api_key(&provider_id).unwrap_or(persisted_value);
+        let secure_value = crate::secret_store::get_post_process_api_key(&provider_id)
+            .ok()
+            .flatten()
+            .unwrap_or(persisted_value);
         settings
             .post_process_api_keys
             .insert(provider_id, secure_value);

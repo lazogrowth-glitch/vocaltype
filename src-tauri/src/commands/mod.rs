@@ -282,19 +282,13 @@ pub fn get_machine_device_id(app: AppHandle) -> Result<String, String> {
 #[specta::specta]
 #[tauri::command]
 pub fn load_secure_auth_token() -> Result<Option<String>, String> {
-    Ok(crate::secrets::load_auth_token())
+    crate::secret_store::get_auth_token()
 }
 
 #[specta::specta]
 #[tauri::command]
 pub fn store_secure_auth_token(token: String) -> Result<(), String> {
-    crate::secrets::store_auth_token(&token)
-}
-
-#[specta::specta]
-#[tauri::command]
-pub fn clear_secure_auth_token() -> Result<(), String> {
-    crate::secrets::store_auth_token("")
+    crate::secret_store::set_auth_token(&token)
 }
 
 /// Check if Apple Intelligence is available on this device.

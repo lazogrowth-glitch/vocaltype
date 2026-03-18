@@ -1034,7 +1034,7 @@ pub fn change_post_process_api_key_setting(
 ) -> Result<(), String> {
     let mut settings = settings::get_settings(&app);
     validate_provider_exists(&settings, &provider_id)?;
-    crate::secrets::store_post_process_api_key(&provider_id, &api_key)?;
+    crate::secret_store::set_post_process_api_key(&provider_id, &api_key)?;
     settings
         .post_process_api_keys
         .insert(provider_id, String::new());

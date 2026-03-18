@@ -66,6 +66,29 @@ const clearLegacyLocalAuth = () => {
   }
 };
 
+const loadLegacyLocalToken = (): string | null => {
+  try {
+    const token = localStorage.getItem(AUTH_TOKEN_KEY);
+    return typeof token === "string" && token.trim() ? token : null;
+  } catch {
+    return null;
+  }
+};
+
+const loadLegacyLocalSession = (): PersistedAuthSession | null => {
+  try {
+    const raw = localStorage.getItem(AUTH_SESSION_KEY);
+    if (!raw) {
+      return null;
+    }
+
+    const parsed = JSON.parse(raw) as PersistedAuthSession;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+};
+
 const sanitizeSessionForPersistence = (
   session: AuthSession | PersistedAuthSession,
 ): PersistedAuthSession => ({
@@ -315,6 +338,7 @@ export const authClient = {
     }
 
     try {
+      const legacyToken = loadLegacyLocalToken();
       const store = await getAuthStore();
       const storedToken = await store.get<string>(AUTH_TOKEN_KEY);
       const secureToken = await getSecureAuthToken();
@@ -350,8 +374,10 @@ export const authClient = {
     await this.hydrateStoredToken();
 
     try {
+      const legacySession = loadLegacyLocalSession();
       const store = await getAuthStore();
-      const storedSession = await store.get<AuthSession>(AUTH_SESSION_KEY);
+      const storedSession =
+        (await store.get<PersistedAuthSession>(AUTH_SESSION_KEY)) ?? null;
       const secureSessionRaw = await getSecureAuthSession();
       const secureSession = secureSessionRaw
         ? (JSON.parse(secureSessionRaw) as AuthSession)
@@ -361,10 +387,33 @@ export const authClient = {
       const persistedSession = storedSession
         ? sanitizeSessionForPersistence(storedSession)
         : null;
-      const migratedSessionToken = readPersistedSessionToken(storedSession);
+      const migratedSessionToken =
+        readPersistedSessionToken(storedSession) ??
+        readPersistedSessionToken(legacySession);
+
+      cachedSession =
+        secureSession ??
+        hydratePersistedSession(
+          persistedSession ??
+            (legacySession ? sanitizeSessionForPersistence(legacySession) : null),
+          cachedToken ?? migratedSessionToken,
+        );
 
       if (resolvedSession) {
-        await setSecureAuthSession(JSON.stringify(resolvedSession));
+        let sessionToPersist: AuthSession | null = null;
+        if (secureSession) {
+          sessionToPersist = secureSession;
+        } else {
+          sessionToPersist = hydratePersistedSession(
+            sanitizeSessionForPersistence(resolvedSession),
+            cachedToken ?? migratedSessionToken,
+          );
+        }
+
+        if (sessionToPersist) {
+          cachedSession = sessionToPersist;
+          await setSecureAuthSession(JSON.stringify(sessionToPersist));
+        }
       }
 
       await store.delete(AUTH_SESSION_KEY);

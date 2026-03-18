@@ -575,7 +575,6 @@ pub fn run(cli_args: CliArgs) {
         commands::get_machine_device_id,
         commands::load_secure_auth_token,
         commands::store_secure_auth_token,
-        commands::clear_secure_auth_token,
         commands::check_apple_intelligence_available,
         commands::initialize_enigo,
         commands::initialize_shortcuts,

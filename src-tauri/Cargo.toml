@@ -78,11 +78,8 @@ strsim = "0.11.0"
 natural = "0.5.0"
 regex = "1"
 chrono = "0.4"
-<<<<<<< HEAD
 keyring = { version = "3", default-features = false, features = ["apple-native", "windows-native", "sync-secret-service"] }
-=======
 sha2 = "0.10"
->>>>>>> 0534e59183f4ea978e19543039d8174b0c58c2e3
 rusqlite = { version = "0.37", features = ["bundled"] }
 tar = "0.4.44"
 flate2 = "1.0"

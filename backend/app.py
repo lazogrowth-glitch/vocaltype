@@ -12,6 +12,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
 from email.mime.text import MIMEText
 from functools import wraps
+from threading import Lock
 from typing import Optional
 
 import jwt
@@ -169,6 +170,13 @@ def device_id_is_valid(device_id: str | None) -> bool:
         return False
 
 
+def device_id_is_stable(device_id: str | None) -> bool:
+    if not device_id:
+        return False
+    normalized = device_id.strip().lower()
+    return bool(re.fullmatch(r"[a-f0-9]{64}", normalized))
+
+
 def consume_rate_limit(bucket: str, limit: int, window_seconds: int) -> int | None:
     now = time.time()
     oldest_allowed = now - window_seconds
@@ -288,6 +296,7 @@ def init_db():
         """
     )
     ensure_column(db, "password_reset_tokens", "attempt_count", "INTEGER NOT NULL DEFAULT 0")
+    ensure_column(db, "users", "token_version", "INTEGER NOT NULL DEFAULT 0")
     db.commit()
     db.close()
 
@@ -779,6 +788,8 @@ def register():
 
     if not device_id_is_valid(device_id):
         return jsonify({"error": "Identifiant appareil invalide"}), 400
+    if device_id and not device_id_is_stable(device_id):
+        return jsonify({"error": "Identifiant appareil non supporté"}), 400
 
     password_error = password_validation_error(password)
     if password_error:
@@ -836,9 +847,9 @@ def register():
         token = make_token(user)
         log_security_event("register_success", user_id=user["id"], email=email, ip=ip_address)
         return jsonify(build_user_response(user, token)), 201
-    except Exception as exc:
+    except Exception:
         app.logger.exception("register_failed email=%s ip=%s", email, ip_address)
-        return jsonify({"error": str(exc)}), 500
+        return jsonify({"error": "Erreur interne"}), 500
 
 
 @app.route("/auth/login", methods=["POST"])
@@ -884,8 +895,14 @@ def login():
     if device_id and not device_id_is_valid(device_id):
         return jsonify({"error": "Identifiant appareil invalide"}), 400
 
-    if device_id:
+    if device_id and device_id_is_stable(device_id):
         register_device(device_id, user["id"])
+    elif device_id:
+        log_security_event(
+            "login_unstable_device_id_ignored",
+            email=email,
+            ip=ip_address,
+        )
 
     token = make_token(user)
     log_security_event("login_success", user_id=user["id"], email=email, ip=ip_address)
@@ -895,7 +912,7 @@ def login():
 @app.route("/auth/session", methods=["GET"])
 @auth_required
 def session(user):
-    token = make_token(user["id"])
+    token = make_token(user)
     return jsonify(build_user_response(user, token))
 
 
@@ -917,8 +934,9 @@ def billing_checkout(user):
             cancel_url=f"{APP_RETURN_URL}?checkout=cancelled",
         )
         return jsonify({"url": checkout.url})
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+    except Exception:
+        app.logger.exception("billing_checkout_failed user_id=%s", user["id"])
+        return jsonify({"error": "Erreur interne"}), 500
 
 
 @app.route("/billing/portal", methods=["POST"])
@@ -934,8 +952,9 @@ def billing_portal(user):
             return_url=APP_RETURN_URL,
         )
         return jsonify({"url": portal.url})
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 500
+    except Exception:
+        app.logger.exception("billing_portal_failed user_id=%s", user["id"])
+        return jsonify({"error": "Erreur interne"}), 500
 
 
 @app.route("/webhook", methods=["POST"])
@@ -950,8 +969,9 @@ def webhook():
             signature,
             STRIPE_WEBHOOK_SECRET,
         )
-    except Exception as exc:
-        return jsonify({"error": str(exc)}), 400
+    except Exception:
+        app.logger.exception("webhook_verification_failed")
+        return jsonify({"error": "Signature webhook invalide"}), 400
 
     def update_subscription(
         customer_id: str,
@@ -1108,7 +1128,7 @@ def forgot_password():
     log_security_event(
         "forgot_password_requested",
         email=email,
-        ip=ip_address,
+        ip=client_ip,
         user_found=bool(user),
     )
     return jsonify({"ok": True})
@@ -1180,7 +1200,7 @@ def reset_password():
     client_ip = get_client_ip()
 
     response = rate_limit_response(
-        f"reset_password:ip:{ip_address}",
+        f"reset_password:ip:{client_ip}",
         limit=8,
         window_seconds=900,
         message="Trop de tentatives de réinitialisation. Réessayez plus tard.",
@@ -1263,7 +1283,7 @@ def reset_password():
     clear_rate_limit("verify_reset:ip", client_ip)
     clear_rate_limit("verify_reset:email", email)
     clear_rate_limit("forgot_password:email", email)
-    token = make_token(user["id"])
+    token = make_token(user)
     return jsonify(build_user_response(user, token))
 
 
