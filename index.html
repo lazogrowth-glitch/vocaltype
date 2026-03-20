@@ -74,6 +74,14 @@ h1 .ul{text-decoration:underline;text-decoration-color:var(--gold);text-underlin
 .proof-txt strong{color:var(--ink)}
 .pstars{color:var(--gold);font-size:.7rem;display:block}
 
+/* ── HERO STATS ── */
+.hero-stats-wrap{padding:0 40px 42px}
+.hero-stats{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));background:linear-gradient(180deg,#efe7d6 0%,#e8dfcd 100%);border:1px solid rgba(201,168,76,.22);border-radius:18px;overflow:hidden;box-shadow:0 10px 24px rgba(0,0,0,.04)}
+.hero-stat{padding:24px 28px;text-align:center}
+.hero-stat + .hero-stat{border-left:1px solid rgba(201,168,76,.2)}
+.hero-stat strong{display:block;font-family:'Cabinet Grotesk',sans-serif;font-size:clamp(2rem,4vw,2.7rem);line-height:1;color:var(--gold);letter-spacing:-1.5px;margin-bottom:8px}
+.hero-stat span{display:block;font-size:.92rem;line-height:1.55;color:var(--ink2)}
+
 /* ── SOCIAL PROOF ── */
 .social-proof{padding:0 40px 56px;max-width:1100px;margin:0 auto}
 .proof-head{display:flex;justify-content:space-between;align-items:flex-end;gap:24px;margin-bottom:32px}
@@ -99,7 +107,7 @@ h1 .ul{text-decoration:underline;text-decoration-color:var(--gold);text-underlin
 
 /* Hero visual */
 .hero-visual{position:relative}
-.hero-float{position:absolute;top:-12px;right:-12px;background:#10B981;border:1px solid rgba(16,185,129,.35);box-shadow:0 14px 30px rgba(16,185,129,.22);border-radius:20px;padding:6px 14px;font-family:'Cabinet Grotesk',sans-serif;font-size:12px;font-weight:700;color:#fff;z-index:3;opacity:0;transform:translateY(8px) scale(.96);transition:opacity .35s ease,transform .35s ease}
+.hero-float{position:absolute;top:-14px;right:-14px;background:#10B981;color:#fff;font-family:'Cabinet Grotesk',sans-serif;font-size:12px;font-weight:700;padding:6px 14px;border-radius:20px;white-space:nowrap;box-shadow:0 4px 12px rgba(16,185,129,.4);z-index:10;opacity:0;transform:translateY(8px) scale(.96);transition:opacity .35s ease,transform .35s ease}
 .hero-float.show{opacity:1;transform:translateY(0) scale(1);animation:heroPop .55s ease}
 @keyframes heroPop{0%{opacity:0;transform:translateY(12px) scale(.92)}65%{opacity:1;transform:translateY(-2px) scale(1.03)}100%{opacity:1;transform:translateY(0) scale(1)}}
 .hw{position:relative;min-width:520px;background:#fff;border:1px solid var(--border);border-radius:18px;overflow:visible;box-shadow:0 24px 64px rgba(0,0,0,.22),0 10px 28px rgba(0,0,0,.1)}
@@ -176,13 +184,26 @@ h2{font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:clamp(1.8r
 .shortcut-demo .keys{display:flex;gap:4px}
 .key{background:var(--paper2);border:1px solid var(--border);border-radius:5px;padding:3px 8px;font-size:.72rem;font-family:monospace;color:var(--ink);font-weight:600}
 
+/* ── INLINE CTA ── */
+.inline-cta{padding:0 40px 56px}
+.inline-cta-inner{max-width:1100px;margin:0 auto;text-align:center}
+
+/* ── DEMO VIDEO ── */
+.demo-video-wrap{padding:0 40px 56px}
+.demo-video{max-width:720px;margin:0 auto;aspect-ratio:16/9;background:#1a1a1a;border:1px solid #333;border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;box-shadow:0 18px 42px rgba(0,0,0,.12)}
+.demo-play{width:60px;height:60px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.35rem;padding-left:4px}
+.demo-video p{font-size:.98rem;color:rgba(255,255,255,.72);font-weight:600}
+
 @media(max-width:1100px){
+  .feature-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .feature-card,.feature-card.feature-lg,.feature-card.feature-center{grid-column:span 1}
   .models-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 
 /* ── WORKS WITH ── */
-.works{padding:64px 40px;max-width:1100px;margin:0 auto}
-.works-header{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:48px}
+.works{padding:92px 40px;background:#12110f;border-top:1px solid rgba(255,255,255,.06);border-bottom:1px solid rgba(255,255,255,.06)}
+.works-inner{max-width:1100px;margin:0 auto}
+.works-header{display:flex;justify-content:space-between;align-items:flex-end;gap:28px;margin-bottom:44px}
 .works-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
 .wcard{background:#fff;border:1px solid var(--border);border-radius:12px;padding:20px;display:flex;align-items:center;gap:12px;transition:all .2s}
 .wcard:hover{border-color:var(--gold);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.08)}
@@ -215,15 +236,30 @@ h2{font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:clamp(1.8r
 .why-card h3{font-family:'Cabinet Grotesk',sans-serif;font-size:1rem;font-weight:800;color:var(--ink);margin-bottom:8px}
 .why-card p{font-size:.84rem;color:var(--ink3);line-height:1.65}
 .feature-grid,.models-grid,.compare-wrap{margin-top:48px}
-.feature-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.models-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;align-items:stretch}
-.feature-card,.model-card{background:#fff;border:1px solid var(--border);border-radius:14px;padding:26px;transition:all .2s}
-.model-card{height:100%;display:flex;flex-direction:column}
-.feature-card:hover,.model-card:hover{border-color:var(--gold);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.08)}
-.feature-top,.model-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
-.feature-icon,.model-icon{width:40px;height:40px;border-radius:10px;background:var(--paper2);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0}
-.feature-card h3,.model-card h3{font-family:'Cabinet Grotesk',sans-serif;font-size:1rem;font-weight:800;color:var(--ink);margin-bottom:8px}
-.feature-card p,.model-card p{font-size:.84rem;color:var(--ink3);line-height:1.65}
+.feature-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:34px;align-items:stretch}
+.models-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;align-items:stretch}
+.feature-card,.model-card{border-radius:18px;transition:all .2s}
+.feature-card{grid-column:span 4;height:100%;display:flex;flex-direction:column;justify-content:flex-start;padding:38px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);box-shadow:0 14px 34px rgba(0,0,0,.18)}
+.feature-card.feature-lg{grid-column:span 8;padding:46px;background:linear-gradient(135deg,#2a2417 0%,#19130b 55%,#120f0a 100%);border:1px solid rgba(201,168,76,.28);box-shadow:0 20px 48px rgba(0,0,0,.3)}
+.feature-card.feature-soft{background:linear-gradient(135deg,rgba(201,168,76,.14) 0%,rgba(255,255,255,.04) 100%);border-color:rgba(201,168,76,.18)}
+.feature-card.feature-highlight{background:linear-gradient(135deg,rgba(201,168,76,.16) 0%,rgba(17,17,17,.68) 100%);border-color:rgba(201,168,76,.26)}
+.feature-card.feature-center{grid-column:4/span 6}
+.model-card{height:100%;display:flex;flex-direction:column;padding:32px;background:#fff;border:1px solid var(--border);box-shadow:0 10px 24px rgba(0,0,0,.04)}
+.feature-card:hover{border-color:rgba(201,168,76,.4);transform:translateY(-2px);box-shadow:0 18px 40px rgba(0,0,0,.24)}
+.model-card:hover{border-color:rgba(201,168,76,.4);transform:translateY(-2px);box-shadow:0 14px 28px rgba(0,0,0,.08)}
+.feature-top,.model-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px}
+.feature-icon,.model-icon{width:64px;height:64px;border-radius:16px;background:rgba(201,168,76,.12);display:flex;align-items:center;justify-content:center;font-size:1.95rem;flex-shrink:0}
+.feature-card h3{font-family:'Cabinet Grotesk',sans-serif;font-size:1.16rem;font-weight:800;color:#fff;margin-bottom:18px}
+.feature-card p{font-size:1rem;color:rgba(255,255,255,.76);line-height:1.65;max-width:26ch}
+.feature-card.feature-lg .feature-icon{width:72px;height:72px;font-size:2.15rem}
+.feature-card.feature-lg h3{font-size:1.58rem}
+.feature-card.feature-lg p{font-size:1.08rem;color:rgba(255,255,255,.82);max-width:34ch}
+.model-card h3{font-family:'Cabinet Grotesk',sans-serif;font-size:1.08rem;font-weight:800;color:#111827;margin-bottom:12px}
+.model-card p{font-size:.95rem;color:#4b5563;line-height:1.65;max-width:none}
+.model-card .mini{background:#f4efe6;border-color:#ddd3bf;color:#5d5136}
+.works .stag{color:var(--gold-lt)}
+.works h2{color:#fff}
+.works .works-header p{color:rgba(255,255,255,.58) !important}
 .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid rgba(201,168,76,.35);background:rgba(201,168,76,.11);font-size:.66rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--ink)}
 .pill.new{background:rgba(26,122,74,.08);border-color:rgba(26,122,74,.24);color:var(--green)}
 .feature-meta,.model-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
@@ -257,9 +293,12 @@ h2{font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:clamp(1.8r
 .pcard-badge{position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--ink);color:#fff;font-family:'Cabinet Grotesk',sans-serif;font-size:.65rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;padding:4px 12px;border-radius:100px;white-space:nowrap}
 .pcard-name{font-family:'Cabinet Grotesk',sans-serif;font-size:.75rem;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);margin-bottom:16px}
 .pcard-price{font-family:'Cabinet Grotesk',sans-serif;font-weight:900;font-size:2.8rem;letter-spacing:-2px;color:var(--ink);line-height:1;margin-bottom:4px}
-.pcard.featured .pcard-price{font-size:5.5rem;letter-spacing:-3px;color:#C9A84C}
+.price-compare{font-size:.78rem;line-height:1.55;color:var(--ink3);margin-bottom:16px}
+.price-row{display:flex;align-items:flex-end;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:8px}
+.pcard.featured .pcard-price{display:flex;align-items:flex-end;gap:8px;font-size:5.5rem;letter-spacing:-3px;color:#C9A84C}
 .pcard-price sup{font-size:1rem;letter-spacing:0;vertical-align:top;margin-top:.5rem;display:inline-block}
-.pcard-price span{font-size:1.375rem;letter-spacing:0;color:var(--ink3);display:inline-block;vertical-align:baseline;margin-left:6px}
+.pcard.featured .pcard-price span{font-size:1.375rem;letter-spacing:0;color:var(--ink3);display:inline-block;vertical-align:baseline;margin-left:0;margin-bottom:.72rem}
+.price-chip{display:inline-flex;align-items:center;padding:6px 10px;border-radius:999px;background:rgba(201,168,76,.12);border:1px solid rgba(201,168,76,.28);font-size:.68rem;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#7b6327}
 .price-note{font-size:.8125rem;font-style:italic;color:var(--ink3);margin-bottom:16px}
 .pcard-sub{font-size:.8rem;color:var(--ink3);margin-bottom:24px;line-height:1.4}
 .pcard-mins{display:inline-flex;align-items:center;gap:6px;background:rgba(201,168,76,.1);border:1px solid rgba(201,168,76,.3);padding:6px 12px;border-radius:8px;margin-bottom:24px;font-size:.82rem;font-weight:600;color:var(--ink)}
@@ -325,6 +364,10 @@ footer{border-top:1px solid var(--border);padding:36px 40px 28px;display:block}
   nav{top:40px}
   .hero{grid-template-columns:1fr;gap:36px;padding:44px 20px 32px}
   .hero-visual{display:none}
+  .hero-stats-wrap{padding:0 20px 28px}
+  .hero-stats{grid-template-columns:1fr}
+  .hero-stat{padding:22px 20px}
+  .hero-stat + .hero-stat{border-left:none;border-top:1px solid rgba(201,168,76,.2)}
   .social-proof{padding:0 20px 28px}
   .proof-grid{grid-template-columns:1fr}
   .proof-head{flex-direction:column;align-items:flex-start}
@@ -332,10 +375,13 @@ footer{border-top:1px solid var(--border);padding:36px 40px 28px;display:block}
   .pain-card{padding:26px 22px}
   .how{grid-template-columns:1fr;gap:36px;padding:48px 20px}
   .how-right{display:none}
+  .inline-cta{padding:0 20px 40px}
+  .demo-video-wrap{padding:0 20px 40px}
   .works-grid{grid-template-columns:repeat(2,1fr);padding:0 20px}
-  .works{padding:48px 20px}
+  .works{padding:64px 20px}
   .works-header{flex-direction:column;align-items:flex-start;gap:8px}
   .feature-grid{grid-template-columns:1fr}
+  .feature-card,.feature-card.feature-lg,.feature-card.feature-center{grid-column:span 1;padding:32px}
   .models-grid{grid-template-columns:1fr}
   .uc-grid{grid-template-columns:1fr;padding:0}
   .usecases{padding:48px 20px}
@@ -381,7 +427,7 @@ footer{border-top:1px solid var(--border);padding:36px 40px 28px;display:block}
  <div>
  <div class="hero-eyebrow"><div class="dot"></div><span data-t="eyebrow">Mac · Windows · Linux · 100% offline</span></div>
  <h1 data-t="h1">Dictez.<br>Partout. Offline.</h1>
- <p class="hero-sub" data-t="hsub">Transcription vocale instantanée dans <strong>n'importe quelle app</strong>. Moteurs IA <strong>locaux</strong>, zéro cloud, zéro abonnement obligatoire.</p>
+ <p class="hero-sub" data-t="hsub">Gagnez 2h par jour. Vos données restent sur votre machine. Fonctionne dans toutes vos apps en 30 secondes.</p>
  <div class="hero-btns">
  <a class="btn-primary" href="https://github.com/lazogrowth-glitch/vocaltype/releases/latest/download/VocalType_0.7.17_x64-setup.exe" download data-download="windows-installer">
  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 15V3m0 12l-4-4m4 4l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17"/></svg>
@@ -404,20 +450,7 @@ footer{border-top:1px solid var(--border);padding:36px 40px 28px;display:block}
  </div>
  <div class="hero-visual">
  <div class="hw">
- <div style="
-  position: absolute;
-  top: -14px;
-  right: -14px;
-  background: #10B981;
-  color: white;
-  font-size: 12px;
-  font-weight: 700;
-  padding: 6px 14px;
-  border-radius: 20px;
-  white-space: nowrap;
-  box-shadow: 0 4px 12px rgba(16,185,129,0.4);
-  z-index: 10;
- " data-t="hero_badge">⚡ Transcribed in 0.8s</div>
+ <div class="hero-float" data-t="hero_badge">⚡ Transcribed in 0.8s</div>
  <div class="hwbar">
  <div class="wdot r"></div><div class="wdot y"></div><div class="wdot g"></div>
  <div class="wtitle" data-t="hero_window">VocalType — offline everywhere</div>
@@ -447,7 +480,23 @@ footer{border-top:1px solid var(--border);padding:36px 40px 28px;display:block}
  <span class="overlay-time">0:03</span>
  </div>
 </div>
-</div>
+ </div>
+</section>
+<section class="hero-stats-wrap">
+ <div class="hero-stats">
+  <div class="hero-stat rv">
+   <strong data-t="hs1_n">3x faster</strong>
+   <span data-t="hs1_p">than typing on a keyboard</span>
+  </div>
+  <div class="hero-stat rv d1">
+   <strong data-t="hs2_n">0 data sent</strong>
+   <span data-t="hs2_p">everything stays on your machine</span>
+  </div>
+  <div class="hero-stat rv d2">
+   <strong data-t="hs3_n">30 seconds</strong>
+   <span data-t="hs3_p">to start dictating</span>
+  </div>
+ </div>
 </section>
 <div class="apps-strip">
  <div class="apps-label" data-t="strip_label">Works in ChatGPT, Claude, Slack, VS Code, Notion, email and any text field</div>
@@ -536,6 +585,20 @@ footer{border-top:1px solid var(--border);padding:36px 40px 28px;display:block}
  </div>
  </div>
 </section>
+<section class="inline-cta">
+ <div class="inline-cta-inner">
+  <a class="btn-primary" href="https://github.com/lazogrowth-glitch/vocaltype/releases/latest/download/VocalType_0.7.17_x64-setup.exe" download data-download="windows-installer">
+   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 15V3m0 12l-4-4m4 4l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17"/></svg>
+   <span data-t="cta_btn">Download for free — 14 days of Premium included</span>
+  </a>
+ </div>
+</section>
+<section class="demo-video-wrap">
+ <div class="demo-video rv">
+  <div class="demo-play">▶</div>
+  <p data-t="video_text">Demo coming soon</p>
+ </div>
+</section>
 <section class="pain">
  <div class="pain-card rv">
   <h2 data-t="pain_h">You still type your prompts by hand?</h2>
@@ -543,59 +606,54 @@ footer{border-top:1px solid var(--border);padding:36px 40px 28px;display:block}
  </div>
 </section>
 <section class="works" id="apps">
+ <div class="works-inner">
  <div class="works-header">
   <div>
    <span class="stag rv" data-t="f_tag">Features</span>
    <h2 class="rv d1" data-t="f_h2">Offline voice tools,<br>built for real work.</h2>
   </div>
-  <p class="rv" style="font-size:.9rem;color:var(--ink3);max-width:320px;line-height:1.6" data-t="f_sub">Far beyond prompt dictation: local engines, live streaming, app-aware rewriting and workflow automation.</p>
+  <p class="rv" style="font-size:.95rem;color:var(--ink3);max-width:360px;line-height:1.7" data-t="f_sub">The fastest path from thought to finished text in your everyday apps.</p>
  </div>
  <div class="feature-grid">
-  <div class="feature-card rv">
-   <div class="feature-top"><div class="feature-icon">🧠</div></div>
+  <div class="feature-card feature-soft rv d1">
+   <div class="feature-top"><div class="feature-icon">🛰️</div></div>
    <h3 data-t="f1_h">Instant transcription, even without internet</h3>
-   <p data-t="f1_p">6 AI engines run directly on your machine. Whisper, Moonshine, Parakeet - zero cloud, zero network latency.</p>
+   <p data-t="f1_p">Dictate. Text appears instantly. Even offline.</p>
   </div>
-  <div class="feature-card rv d1">
+  <div class="feature-card rv d2">
    <div class="feature-top"><div class="feature-icon">⚡</div><span class="pill new" data-t="new_badge">New</span></div>
    <h3 data-t="f2_h">Your words appear while you speak</h3>
-   <p data-t="f2_p">Moonshine V2 displays every word in real time while you dictate. No waiting after recording.</p>
+   <p data-t="f2_p">Speak. Words show up live.</p>
   </div>
-  <div class="feature-card rv d2">
-   <div class="feature-top"><div class="feature-icon">✍️</div></div>
-   <h3 data-t="f3_h">Rewrite any text by talking</h3>
-   <p data-t="f3_p">Select text in any app, dictate a command, and VocalType rewrites it with an LLM in seconds.</p>
-  </div>
-  <div class="feature-card rv">
+  <div class="feature-card rv d1">
    <div class="feature-top"><div class="feature-icon">🎯</div></div>
    <h3 data-t="f4_h">Automatically adapts to every app</h3>
-   <p data-t="f4_p">Slack, email, VS Code, Notion - tone and style adapt automatically based on the active app.</p>
+   <p data-t="f4_p">Works everywhere. Slack, email, VS Code.</p>
   </div>
-  <div class="feature-card rv d1">
+  <div class="feature-card feature-lg command rv d2">
+   <div class="feature-top"><div class="feature-icon">✍️</div></div>
+   <h3 data-t="f3_h">Rewrite any text by talking</h3>
+   <p data-t="f3_p">Select. Speak. The text gets fixed.</p>
+  </div>
+  <div class="feature-card rv d2">
    <div class="feature-top"><div class="feature-icon">📎</div><span class="pill new" data-t="new_badge">New</span></div>
    <h3 data-t="f5_h">Say one word, paste a full paragraph</h3>
-   <p data-t="f5_p">Create your own voice triggers. Say “my email” and VocalType instantly pastes your full address.</p>
+   <p data-t="f5_p">One phrase. A full paragraph appears.</p>
   </div>
-  <div class="feature-card rv d2">
-   <div class="feature-top"><div class="feature-icon">⌨️</div></div>
-   <h3 data-t="f6_h">9 shortcuts that do an assistant's work</h3>
-   <p data-t="f6_p">9 configurable shortcuts, each with its own LLM prompt and AI model. Press F1 and it's done.</p>
-  </div>
-  <div class="feature-card rv">
-   <div class="feature-top"><div class="feature-icon">🧩</div></div>
-   <h3 data-t="f7_h">Automatically optimized for your machine</h3>
-   <p data-t="f7_p">VocalType detects your CPU, GPU and NPU at startup and picks the optimal backend. Copilot+ PCs and Apple Silicon supported.</p>
-  </div>
-  <div class="feature-card rv d1">
-   <div class="feature-top"><div class="feature-icon">🎧</div><span class="pill new" data-t="new_badge">New</span></div>
-   <h3 data-t="f8_h">Transcribe your recorded meetings</h3>
-   <p data-t="f8_p">Drop a WAV file into VocalType - transcribed offline with your active model, then saved to history.</p>
-  </div>
-  <div class="feature-card rv d2">
+  <div class="feature-card feature-highlight feature-center rv">
    <div class="feature-top"><div class="feature-icon">📊</div><span class="pill new" data-t="new_badge">New</span></div>
    <h3 data-t="f9_h">See how much time you save every day</h3>
-   <p data-t="f9_p">Dictated words, time saved, favorite model - a complete dashboard to measure your productivity.</p>
+   <p data-t="f9_p">Track the time you get back.</p>
   </div>
+ </div>
+ </div>
+</section>
+<section class="inline-cta">
+ <div class="inline-cta-inner">
+  <a class="btn-primary" href="https://github.com/lazogrowth-glitch/vocaltype/releases/latest/download/VocalType_0.7.17_x64-setup.exe" download data-download="windows-installer">
+   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 15V3m0 12l-4-4m4 4l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17"/></svg>
+   <span data-t="cta_btn">Download for free — 14 days of Premium included</span>
+  </a>
  </div>
 </section>
 <section class="social-proof">
@@ -646,7 +704,7 @@ footer{border-top:1px solid var(--border);padding:36px 40px 28px;display:block}
  <div class="why-inner">
   <span class="stag rv" data-t="m_tag">Models</span>
   <h2 class="rv d1" data-t="m_h2">Choose the engine<br>that fits the job.</h2>
-  <div class="feature-grid models-grid">
+  <div class="models-grid">
    <div class="model-card rv">
     <div class="model-top"><div class="model-icon">🌙</div><span class="mini" data-t="m1_meta">Streaming</span></div>
     <h3 data-t="m1_h">Moonshine V2</h3>
@@ -715,6 +773,14 @@ footer{border-top:1px solid var(--border);padding:36px 40px 28px;display:block}
   </table>
  </div>
 </section>
+<section class="inline-cta">
+ <div class="inline-cta-inner">
+  <a class="btn-primary" href="https://github.com/lazogrowth-glitch/vocaltype/releases/latest/download/VocalType_0.7.17_x64-setup.exe" download data-download="windows-installer">
+   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 15V3m0 12l-4-4m4 4l4-4M2 17l.621 2.485A2 2 0 004.561 21h14.878a2 2 0 001.94-1.515L22 17"/></svg>
+   <span data-t="cta_btn">Download for free — 14 days of Premium included</span>
+  </a>
+ </div>
+</section>
 <!-- PRICING -->
 <section class="pricing" id="pricing">
  <span class="stag rv" data-t="p_tag">Pricing</span>
@@ -738,8 +804,12 @@ footer{border-top:1px solid var(--border);padding:36px 40px 28px;display:block}
   <div class="pcard featured rv">
    <div class="pcard-badge" data-t="p1_badge">Most popular</div>
    <div class="pcard-name" data-t="p1_name">Premium</div>
-   <div class="pcard-price"><sup>$</sup>4.99<span data-t="p1_mo">/mo</span></div>
-   <div class="price-note" data-t="p1_day">or about $0.17/day</div>
+   <div class="price-compare" data-t="p1_compare">Wispr Flow: $12/mo · Super Whisper: $7/mo</div>
+   <div class="price-row">
+    <div class="pcard-price"><sup>$</sup>4.99<span data-t="p1_mo">/mo</span></div>
+    <div class="price-chip" data-t="p1_chip">3x cheaper than competitors</div>
+   </div>
+   <div class="price-note" data-t="p1_day">≈ $0.17/day. Less than a coffee a week.</div>
    <div class="pcard-sub" data-t="p1_sub">$4.99/month for the full VocalType workflow. 14-day Premium trial included.</div>
    <div class="pcard-mins">🎙️ <span data-t="p1_mins">No credit card required to start</span></div>
    <ul class="pfeats">
@@ -843,9 +913,12 @@ en:{
   n_how:"How it works",n_features:"Features",n_models:"Models",n_price:"Pricing",n_faq:"FAQ",n_dl:"Download for free — 14 days of Premium included",
   eyebrow:"Mac · Windows · Linux · 100% offline",
   h1:"Dictate.<br>Anywhere. Offline.",
-  hsub:"Instant voice transcription in <strong>any app</strong>. <strong>Local AI engines</strong>, zero cloud, zero mandatory subscription.",
+  hsub:"Save 2 hours a day. Your data stays on your machine.<br>Works in all your apps in 30 seconds.",
   h_btn:"Download for free — 14 days of Premium included",h_sec:"See how it works",
   h_proof:"Built for developers, founders and power users across Mac, Windows and Linux",
+  hs1_n:"3x faster",hs1_p:"than typing on a keyboard",
+  hs2_n:"0 data sent",hs2_p:"everything stays on your machine",
+  hs3_n:"30 seconds",hs3_p:"to start dictating",
   hero_user_1:"Write a professional email to postpone our Monday meeting.",
   hero_ai_1:"Of course. Here's a professional email you can send...",
   hero_badge:"⚡ Transcribed in 0.8s",
@@ -870,20 +943,20 @@ en:{
   before:"Before",before_body:"Typing a full message, prompt or meeting note manually",before_time:"~45 sec",
   after:"After",after_body:"Shortcut → dictate, stream, rewrite and paste instantly",after_time:"~8 sec",
   sk_label:"Your shortcut (customizable)",
+  video_text:"Demo coming soon",
   pain_h:"You still type your prompts by hand?",
   pain_p:"Every Slack message, every email, every ChatGPT prompt — thousands of words a day that you could dictate in half the time.",
   f_tag:"Features",f_h2:"Offline voice tools,<br>built for real work.",
-  f_sub:"Far beyond prompt dictation: local engines, live streaming, app-aware rewriting and workflow automation.",
+  f_sub:"The fastest path from thought to finished text in your everyday apps.",
   new_badge:"New",
-  f1_h:"Instant transcription, even without internet",f1_p:"6 AI engines run directly on your machine. Whisper, Moonshine, Parakeet - zero cloud, zero network latency.",
-  f2_h:"Your words appear while you speak",f2_p:"Moonshine V2 displays every word in real time while you dictate. No waiting after recording.",
-  f3_h:"Rewrite any text by talking",f3_p:"Select text in any app, dictate a command, and VocalType rewrites it with an LLM in seconds.",
-  f4_h:"Automatically adapts to every app",f4_p:"Slack, email, VS Code, Notion - tone and style adapt automatically based on the active app.",
-  f5_h:"Say one word, paste a full paragraph",f5_p:"Create your own voice triggers. Say “my email” and VocalType instantly pastes your full address.",
-  f6_h:"9 shortcuts that do an assistant's work",f6_p:"9 configurable shortcuts, each with its own LLM prompt and AI model. Press F1 and it's done.",
-  f7_h:"Automatically optimized for your machine",f7_p:"VocalType detects your CPU, GPU and NPU at startup and picks the optimal backend. Copilot+ PCs and Apple Silicon supported.",
-  f8_h:"Transcribe your recorded meetings",f8_p:"Drop a WAV file into VocalType - transcribed offline with your active model, then saved to history.",
-  f9_h:"See how much time you save every day",f9_p:"Dictated words, time saved, favorite model - a complete dashboard to measure your productivity.",
+  f1_h:"Instant transcription, even without internet",f1_p:"Dictate. Text appears instantly. Even offline.",
+  f2_h:"Your words appear while you speak",f2_p:"Speak. Words show up live.",
+  f3_h:"Rewrite any text by talking",f3_p:"Select. Speak. The text gets fixed.",
+  f4_h:"Automatically adapts to every app",f4_p:"Works everywhere. Slack, email, VS Code.",
+  f5_h:"Say one word, paste a full paragraph",f5_p:"One phrase. A full paragraph appears.",
+  f6_h:"9 shortcuts that do an assistant's work",f6_p:"One command. One complete action.",
+  f8_h:"Transcribe your recorded meetings",f8_p:"Your audio meetings become text in one click.",
+  f9_h:"See how much time you save every day",f9_p:"Track the time you get back.",
   m_tag:"Models",m_h2:"Choose the engine<br>that fits the job.",
   m1_h:"Moonshine V2",m1_p:"The fastest option for quick everyday dictation.",m1_meta:"Streaming",
   m2_h:"Parakeet V3",m2_p:"Accurate and multilingual, optimized for Windows NPU setups.",m2_meta:"NPU / DirectML",
@@ -904,7 +977,9 @@ en:{
   p0_f1:"30 transcriptions per week",p0_f2:"5 history entries",p0_f3:"Base models already downloaded remain usable",p0_f4:"Mac · Windows · Linux",
   p0_btn:"Download for free — 14 days of Premium included",p0_note:"No commitment · No credit card",
   p1_badge:"Most popular",p1_name:"Premium",p1_mo:"/mo",p1_sub:"$4.99/month for the full VocalType workflow. 14-day Premium trial included.",
-  p1_day:"or about $0.17/day",
+  p1_compare:"Wispr Flow: $12/mo · Super Whisper: $7/mo",
+  p1_chip:"3x cheaper than competitors",
+  p1_day:"≈ $0.17/day. Less than a coffee a week.",
   p1_mins:"No credit card required to start",
   p1_f1:"Unlimited transcriptions and unlimited history",p1_f2:"Download and activate every model",
   p1_f3:"Command Mode, per-app context, voice snippets and 9 custom actions",p1_f4:"WAV file transcription, history export and advanced stats",
@@ -931,9 +1006,12 @@ fr:{
   n_how:"Comment ça marche",n_features:"Fonctionnalités",n_models:"Modèles",n_price:"Tarifs",n_faq:"FAQ",n_dl:"Télécharger gratuitement — 14 jours Premium offerts",
   eyebrow:"Mac · Windows · Linux · 100% hors ligne",
   h1:"Dictez.<br>Partout. Offline.",
-  hsub:"Transcription vocale instantanée dans <strong>n'importe quelle app</strong>. Moteurs IA <strong>locaux</strong>, zéro cloud, zéro abonnement obligatoire.",
+  hsub:"Gagnez 2h par jour. Vos données restent sur votre machine.<br>Fonctionne dans toutes vos apps en 30 secondes.",
   h_btn:"Télécharger gratuitement — 14 jours Premium offerts",h_sec:"Voir comment ça marche",
   h_proof:"Pensé pour les développeurs, fondateurs et power users sur Mac, Windows et Linux",
+  hs1_n:"3x plus rapide",hs1_p:"que taper au clavier",
+  hs2_n:"0 donnée envoyée",hs2_p:"tout reste sur votre machine",
+  hs3_n:"30 secondes",hs3_p:"pour commencer à dicter",
   hero_user_1:"Rédige un email pro pour reporter notre réunion de lundi.",
   hero_ai_1:"Bien sûr ! Voici un email professionnel que vous pouvez envoyer...",
   hero_badge:"⚡ Transcrit en 0.8s",
@@ -958,20 +1036,20 @@ fr:{
   before:"Avant",before_body:"Taper manuellement un message, un prompt ou une note de réunion",before_time:"~45 sec",
   after:"Après",after_body:"Raccourci → dicter, streamer, réécrire et coller instantanément",after_time:"~8 sec",
   sk_label:"Votre raccourci (personnalisable)",
+  video_text:"Démo en cours de préparation",
   pain_h:"Vous tapez encore vos prompts à la main ?",
   pain_p:"Chaque message Slack, chaque email, chaque prompt ChatGPT — des milliers de mots par jour que vous pourriez dicter en 2x moins de temps.",
   f_tag:"Fonctionnalités",f_h2:"Des outils vocaux offline,<br>faits pour le vrai travail.",
-  f_sub:"Bien plus que la dictée de prompts : moteurs locaux, streaming live, réécriture contextuelle et automatisation.",
+  f_sub:"Le chemin le plus rapide entre votre idée et un texte prêt à envoyer.",
   new_badge:"Nouveau",
-  f1_h:"Transcription instantanée, même sans internet",f1_p:"6 moteurs IA tournent directement sur votre machine. Whisper, Moonshine, Parakeet - zéro cloud, zéro latence réseau.",
-  f2_h:"Vos mots apparaissent pendant que vous parlez",f2_p:"Moonshine V2 affiche chaque mot en temps réel pendant que vous dictez. Pas d'attente après l'enregistrement.",
-  f3_h:"Réécrivez n'importe quel texte en parlant",f3_p:"Sélectionnez du texte dans n'importe quelle app, dictez une commande - VocalType le réécrit via LLM en 2 secondes.",
-  f4_h:"S'adapte automatiquement à chaque app",f4_p:"Slack, email, VS Code, Notion - le ton et le style s'adaptent automatiquement selon l'app active.",
-  f5_h:"Dites un mot, collez un paragraphe entier",f5_p:"Créez vos propres déclencheurs vocaux. Dites 'mon email' et VocalType colle votre adresse complète instantanément.",
-  f6_h:"9 raccourcis qui font le travail d'un assistant",f6_p:"9 raccourcis configurables, chacun avec son propre prompt LLM et modèle IA. Appuyez sur F1 - c'est fait.",
-  f7_h:"Optimisé automatiquement pour votre machine",f7_p:"VocalType détecte votre CPU, GPU et NPU au démarrage et choisit le backend optimal. Copilot+ PC et Apple Silicon supportés.",
-  f8_h:"Transcrivez vos réunions enregistrées",f8_p:"Glissez un fichier WAV dans VocalType - transcrit offline avec votre modèle actif, résultat dans l'historique.",
-  f9_h:"Voyez combien de temps vous économisez chaque jour",f9_p:"Mots dictés, temps économisé, modèle favori - un dashboard complet pour mesurer votre productivité.",
+  f1_h:"Transcription instantanée, même sans internet",f1_p:"Dictez. Le texte apparaît instantanément. Même hors ligne.",
+  f2_h:"Vos mots apparaissent pendant que vous parlez",f2_p:"Parlez. Les mots s'affichent en direct.",
+  f3_h:"Réécrivez n'importe quel texte en parlant",f3_p:"Sélectionnez. Parlez. Le texte est corrigé.",
+  f4_h:"S'adapte automatiquement à chaque app",f4_p:"Fonctionne partout. Slack, email, VS Code.",
+  f5_h:"Dites un mot, collez un paragraphe entier",f5_p:"Une phrase. Un paragraphe entier.",
+  f6_h:"9 raccourcis qui font le travail d'un assistant",f6_p:"Une commande. Une action complète.",
+  f8_h:"Transcrivez vos réunions enregistrées",f8_p:"Vos réunions audio -> texte en 1 clic.",
+  f9_h:"Voyez combien de temps vous économisez chaque jour",f9_p:"Suivez le temps que vous gagnez.",
   m_tag:"Modèles IA",m_h2:"Choisissez le moteur<br>adapté à la tâche.",
   m1_h:"Moonshine V2",m1_p:"Le plus rapide — idéal pour la dictée rapide au quotidien.",m1_meta:"Streaming",
   m2_h:"Parakeet V3",m2_p:"Précis et multilingue — optimisé NPU Windows.",m2_meta:"NPU / DirectML",
@@ -992,7 +1070,9 @@ fr:{
   p0_f1:"30 transcriptions par semaine",p0_f2:"5 entrées dans l'historique",p0_f3:"Les modèles de base déjà téléchargés restent utilisables",p0_f4:"Mac · Windows · Linux",
   p0_btn:"Télécharger gratuitement — 14 jours Premium offerts",p0_note:"Aucun engagement · Pas de carte de crédit",
   p1_badge:"Le plus populaire",p1_name:"Premium",p1_mo:"/mois",p1_sub:"4,99 $/mois pour toute l'expérience VocalType. Trial Premium de 14 jours inclus.",
-  p1_day:"soit ~0,17 $/jour",
+  p1_compare:"Wispr Flow : 12$/mois · Super Whisper : 7$/mois",
+  p1_chip:"3x moins cher que la concurrence",
+  p1_day:"≈ 0,17$/jour. Moins qu'un cafe par semaine.",
   p1_mins:"Aucune carte bancaire requise pour commencer",
   p1_f1:"Transcriptions illimitées et historique illimité",p1_f2:"Téléchargement et activation de tous les modèles",
   p1_f3:"Command Mode, contexte par application, snippets vocaux et 9 actions custom",p1_f4:"Transcription de fichiers WAV, export d'historique et stats avancées",
