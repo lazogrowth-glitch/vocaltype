@@ -12,19 +12,26 @@ import { MuteWhileRecording } from "../MuteWhileRecording";
 import { ModelSettingsCard } from "./ModelSettingsCard";
 import { LongAudioModelSettings } from "./LongAudioModelSettings";
 import { usePlan } from "@/lib/plan/context";
+import { DictionarySettings } from "../dictionary/DictionarySettings";
+import { AppContextSettings } from "../app-context/AppContextSettings";
 
 export const GeneralSettings: React.FC = () => {
   const { t } = useTranslation();
   const { audioFeedbackEnabled } = useSettings();
   const { isBasicTier, onStartCheckout } = usePlan();
-  const [activeTab, setActiveTab] = useState<"shortcuts" | "audio" | "dictation">(
-    "shortcuts",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "shortcuts" | "audio" | "dictation" | "dictionary" | "context"
+  >("shortcuts");
 
   const tabs = [
     { id: "shortcuts" as const, label: "Raccourcis" },
     { id: "audio" as const, label: "Audio" },
     { id: "dictation" as const, label: "Dictée" },
+    { id: "dictionary" as const, label: t("dictionary.tab") },
+    {
+      id: "context" as const,
+      label: t("appContext.tab", { defaultValue: "Contexte" }),
+    },
   ];
 
   return (
@@ -70,6 +77,16 @@ export const GeneralSettings: React.FC = () => {
           <ShortcutInput shortcutId="show_history" grouped={true} disabled={isBasicTier} />
           <ShortcutInput shortcutId="copy_latest_history" grouped={true} disabled={isBasicTier} />
           <PushToTalk descriptionMode="tooltip" grouped={true} />
+          {/* ── Command Mode ─────────────────────────────────────────── */}
+          <div className="flex items-center gap-1.5 border-t border-white/6 px-4 pb-0.5 pt-2">
+            <span className="text-[10.5px] text-white/40">
+              {t("commandMode.label", { defaultValue: "Command Mode" })}
+            </span>
+            <span className="rounded bg-logo-primary/15 px-1.5 py-0.5 text-[9.5px] font-medium text-logo-primary">
+              {t("basic.premiumBadge", { defaultValue: "Premium" })}
+            </span>
+          </div>
+          <ShortcutInput shortcutId="command_mode" grouped={true} disabled={isBasicTier} />
         </SettingsGroup>
       )}
 
@@ -93,6 +110,10 @@ export const GeneralSettings: React.FC = () => {
           <LongAudioModelSettings />
         </div>
       )}
+
+      {activeTab === "dictionary" && <DictionarySettings />}
+
+      {activeTab === "context" && <AppContextSettings />}
     </div>
   );
 };

@@ -665,6 +665,9 @@ pub struct AppSettings {
     pub adaptive_profile_applied: bool,
     #[serde(default)]
     pub adaptive_machine_profile: Option<AdaptiveMachineProfile>,
+    /// Whether the automatic app-context feature is enabled globally.
+    #[serde(default = "default_app_context_enabled")]
+    pub app_context_enabled: bool,
 }
 
 fn default_model() -> String {
@@ -673,6 +676,10 @@ fn default_model() -> String {
 
 fn default_adaptive_profile_applied() -> bool {
     false
+}
+
+fn default_app_context_enabled() -> bool {
+    true
 }
 
 fn default_always_on_microphone() -> bool {
@@ -2269,6 +2276,16 @@ pub fn get_default_settings() -> AppSettings {
             description: "Copies the latest transcription entry to your clipboard.".to_string(),
             default_binding: "".to_string(),
             current_binding: "".to_string(),
+        },
+    );
+    bindings.insert(
+        "command_mode".to_string(),
+        ShortcutBinding {
+            id: "command_mode".to_string(),
+            name: "Command Mode".to_string(),
+            description: "Selects text, records a voice command, and replaces the selection with the AI-processed result.".to_string(),
+            default_binding: "ctrl+alt+c".to_string(),
+            current_binding: "ctrl+alt+c".to_string(),
         },
     );
 

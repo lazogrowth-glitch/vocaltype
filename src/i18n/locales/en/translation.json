@@ -129,8 +129,10 @@
       "experimental": "Experimental",
       "english": "English",
       "englishOnly": "English Only",
-      "multilingualExperimental": "Multilingual"
+      "multilingualExperimental": "Multilingual",
+      "localOnly": "100% Local"
     },
+    "geminiCloudWarning": "Gemini sends audio to Google for transcription. Other models process everything locally on your device.",
     "custom": "Custom",
     "active": "Active",
     "switching": "Switching...",
@@ -795,6 +797,18 @@
       "cta": "Upgrade to Premium →"
     }
   },
+  "dictionary": {
+    "tab": "Dictionary",
+    "empty": "No custom terms yet. Add words, proper nouns, or acronyms.",
+    "fromPlaceholder": "Whisper hears…",
+    "toPlaceholder": "Replace with…",
+    "add": "Add",
+    "remove": "Remove",
+    "save": "Save",
+    "cancel": "Cancel",
+    "duplicate": "\"{{from}}\" is already in the dictionary.",
+    "arrow": "→"
+  },
   "basic": {
     "copiedToClipboard": "Text copied to clipboard",
     "copiedToClipboardDesc": "Native injection is reserved for the Premium plan.",
@@ -804,6 +818,13 @@
     "upgradeCta": "Upgrade to Premium →",
     "upgrade": "Upgrade to Premium",
     "historyLimited": "History limited to {{limit}} entries on Basic",
-    "shortcutsLocked": "Custom shortcuts are a Premium feature"
+    "shortcutsLocked": "Custom shortcuts are a Premium feature",
+    "premiumBadge": "Premium"
+  },
+  "commandMode": {
+    "label": "Command Mode",
+    "recording": "Speak now… ({{count}}s)",
+    "processing": "Processing…",
+    "errorTitle": "Command Mode — error"
   }
 }

@@ -2,7 +2,8 @@
 use crate::apple_intelligence;
 use crate::audio_feedback::{play_feedback_sound, play_feedback_sound_blocking, SoundType};
 use crate::context_detector::{
-    detect_current_app_context, ActiveAppContextState,
+    detect_current_app_context, ActiveAppContextState, AppContextCategory,
+    AppTranscriptionContext,
 };
 use crate::managers::audio::AudioRecordingManager;
 use crate::managers::history::HistoryManager;
@@ -576,7 +577,11 @@ fn build_system_prompt(prompt_template: &str) -> String {
     prompt_template.replace("${output}", "").trim().to_string()
 }
 
-async fn post_process_transcription(settings: &AppSettings, transcription: &str) -> Option<String> {
+async fn post_process_transcription(
+    settings: &AppSettings,
+    transcription: &str,
+    app_context: Option<&AppTranscriptionContext>,
+) -> Option<String> {
     let provider = match settings.active_post_process_provider().cloned() {
         Some(provider) => provider,
         None => {
@@ -638,10 +643,34 @@ async fn post_process_transcription(settings: &AppSettings, transcription: &str)
         .cloned()
         .unwrap_or_default();
 
+    // One-line context hint prepended to the system prompt when available.
+    // Code context is already blocked upstream; Browser/Unknown produce no hint.
+    let context_hint: Option<&'static str> = app_context.and_then(|ctx| {
+        match ctx.category {
+            AppContextCategory::Email => Some(
+                "Context: email — formal tone, complete punctuation, capitalize names properly.",
+            ),
+            AppContextCategory::Chat => Some(
+                "Context: chat message — casual tone, light punctuation, conversational style.",
+            ),
+            AppContextCategory::Notes => Some(
+                "Context: notes — preserve markdown structure, bullet points and headings.",
+            ),
+            AppContextCategory::Document => Some(
+                "Context: document — formal language, complete sentences, proper paragraphs.",
+            ),
+            _ => None,
+        }
+    });
+
     if provider.supports_structured_output {
         debug!("Using structured outputs for provider '{}'", provider.id);
 
-        let system_prompt = build_system_prompt(&prompt);
+        let base_prompt = build_system_prompt(&prompt);
+        let system_prompt = match context_hint {
+            Some(hint) => format!("{hint}\n\n{base_prompt}"),
+            None => base_prompt,
+        };
         let user_content = transcription.to_string();
 
         // Handle Apple Intelligence separately since it uses native Swift APIs
@@ -1229,9 +1258,13 @@ impl ShortcutAction for TranscribeAction {
 
         let binding_id = binding_id.to_string(); // Clone binding_id for the async task
         let post_process = self.post_process;
-        let active_app_context = if let Some(state) = app.try_state::<ActiveAppContextState>() {
-            if let Ok(snapshot) = state.0.lock() {
-                snapshot.active_context_for_binding(&binding_id)
+        let active_app_context = if get_settings(app).app_context_enabled {
+            if let Some(state) = app.try_state::<ActiveAppContextState>() {
+                if let Ok(snapshot) = state.0.lock() {
+                    snapshot.active_context_for_binding(&binding_id)
+                } else {
+                    None
+                }
             } else {
                 None
             }
@@ -1741,6 +1774,40 @@ impl ShortcutAction for TranscribeAction {
                         );
                     }
 
+                    // Punctuation correction (spaces, terminal punct, initial cap)
+                    let punct_started = Instant::now();
+                    let before_punct = final_text.clone();
+                    let punct_category = active_app_context
+                        .as_ref()
+                        .map(|ctx| ctx.category)
+                        .unwrap_or(AppContextCategory::Unknown);
+                    final_text =
+                        crate::punctuation::fix_punctuation(&final_text, punct_category);
+                    if let Ok(mut p) = profiler.lock() {
+                        p.push_step_since(
+                            "punctuation_fix",
+                            punct_started,
+                            Some(format!("changed={}", final_text != before_punct)),
+                        );
+                    }
+
+                    // Custom dictionary replacements
+                    let dict_started = Instant::now();
+                    let before_dict = final_text.clone();
+                    if let Some(dict) =
+                        ah.try_state::<std::sync::Arc<crate::dictionary::DictionaryManager>>()
+                    {
+                        let patterns = dict.compiled_entries();
+                        final_text = crate::dictionary::apply_dictionary(&final_text, &patterns);
+                    }
+                    if let Ok(mut p) = profiler.lock() {
+                        p.push_step_since(
+                            "dictionary_replacement",
+                            dict_started,
+                            Some(format!("changed={}", final_text != before_dict)),
+                        );
+                    }
+
                     let selected_action = selected_action_key.and_then(|key| {
                         settings
                             .post_process_actions
@@ -1749,7 +1816,12 @@ impl ShortcutAction for TranscribeAction {
                             .cloned()
                     });
 
-                    if selected_action.is_some() || post_process {
+                    let is_code_context = active_app_context
+                        .as_ref()
+                        .map(|ctx| ctx.category.skip_post_processing())
+                        .unwrap_or(false);
+
+                    if !is_code_context && (selected_action.is_some() || post_process) {
                         show_processing_overlay(&ah);
                         if let Some(coordinator) = ah.try_state::<TranscriptionCoordinator>() {
                             coordinator.notify_enter_processing();
@@ -1757,7 +1829,11 @@ impl ShortcutAction for TranscribeAction {
                     }
 
                     let post_process_started = Instant::now();
-                    let processed = if let Some(ref action) = selected_action {
+                    let processed = if is_code_context {
+                        // Code context: skip all LLM post-processing, inject raw text.
+                        debug!("Code context detected — skipping LLM post-processing");
+                        None
+                    } else if let Some(ref action) = selected_action {
                         process_action(
                             &settings,
                             &final_text,
@@ -1767,7 +1843,12 @@ impl ShortcutAction for TranscribeAction {
                         )
                         .await
                     } else if post_process {
-                        post_process_transcription(&settings, &final_text).await
+                        post_process_transcription(
+                            &settings,
+                            &final_text,
+                            active_app_context.as_ref(),
+                        )
+                        .await
                     } else {
                         None
                     };
@@ -2087,6 +2168,10 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
     map.insert(
         "test".to_string(),
         Arc::new(TestAction) as Arc<dyn ShortcutAction>,
+    );
+    map.insert(
+        "command_mode".to_string(),
+        Arc::new(crate::command_mode::CommandModeAction) as Arc<dyn ShortcutAction>,
     );
     map
 });

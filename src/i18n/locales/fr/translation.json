@@ -129,8 +129,10 @@
       "experimental": "Expérimental",
       "english": "Anglais",
       "englishOnly": "Anglais uniquement",
-      "multilingualExperimental": "Multilingue"
+      "multilingualExperimental": "Multilingue",
+      "localOnly": "100% local"
     },
+    "geminiCloudWarning": "Gemini envoie l'audio à Google pour la transcription. Les autres modèles traitent tout localement sur ta machine.",
     "custom": "Personnalisé",
     "active": "Actif",
     "switching": "Changement...",
@@ -795,6 +797,18 @@
       "cta": "Passer à Premium →"
     }
   },
+  "dictionary": {
+    "tab": "Dictionnaire",
+    "empty": "Aucun terme custom. Ajoute des mots, noms propres ou acronymes.",
+    "fromPlaceholder": "Whisper entend…",
+    "toPlaceholder": "Remplacer par…",
+    "add": "Ajouter",
+    "remove": "Supprimer",
+    "save": "Sauvegarder",
+    "cancel": "Annuler",
+    "duplicate": "\"{{from}}\" est déjà dans le dictionnaire.",
+    "arrow": "→"
+  },
   "basic": {
     "copiedToClipboard": "Texte copié dans le presse-papier",
     "copiedToClipboardDesc": "L'injection directe est réservée au plan Premium.",
@@ -804,6 +818,13 @@
     "upgradeCta": "Passer à Premium →",
     "upgrade": "Passer à Premium",
     "historyLimited": "Historique limité à {{limit}} entrées en Basic",
-    "shortcutsLocked": "Raccourcis personnalisés réservés à Premium"
+    "shortcutsLocked": "Raccourcis personnalisés réservés à Premium",
+    "premiumBadge": "Premium"
+  },
+  "commandMode": {
+    "label": "Command Mode",
+    "recording": "Parle maintenant… ({{count}}s)",
+    "processing": "Traitement en cours…",
+    "errorTitle": "Command Mode — erreur"
   }
 }

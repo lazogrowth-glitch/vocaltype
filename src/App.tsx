@@ -61,6 +61,7 @@ function App() {
   const hasCompletedPostOnboardingInit = useRef(false);
   const [showTrialWelcome, setShowTrialWelcome] = useState(false);
   const lastRuntimeErrorRef = useRef<{ key: string; at: number } | null>(null);
+  const commandModeCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const hasAnyAccess =
     licenseState?.state === "online_valid" ||
     licenseState?.state === "offline_valid";
@@ -465,6 +466,94 @@ function App() {
       unlisten.then((fn) => fn());
     };
   }, [t]);
+
+  // ── Command Mode event listeners ──────────────────────────────────────────
+
+  /** Clears the countdown interval if one is running. */
+  const clearCommandModeCountdown = useCallback(() => {
+    if (commandModeCountdownRef.current !== null) {
+      clearInterval(commandModeCountdownRef.current);
+      commandModeCountdownRef.current = null;
+    }
+  }, []);
+
+  // command-mode-started → loading toast with live countdown
+  useEffect(() => {
+    const unlisten = listen<{ max_duration_secs: number }>(
+      "command-mode-started",
+      (event) => {
+        const maxSecs = event.payload?.max_duration_secs ?? 8;
+        let remaining = maxSecs;
+
+        clearCommandModeCountdown();
+
+        toast.loading(
+          t("commandMode.recording", { count: remaining, defaultValue: `Parle maintenant… (${remaining}s)` }),
+          { id: "command-mode", duration: Infinity },
+        );
+
+        commandModeCountdownRef.current = setInterval(() => {
+          remaining -= 1;
+          if (remaining > 0) {
+            toast.loading(
+              t("commandMode.recording", { count: remaining, defaultValue: `Parle maintenant… (${remaining}s)` }),
+              { id: "command-mode", duration: Infinity },
+            );
+          } else {
+            clearCommandModeCountdown();
+          }
+        }, 1000);
+      },
+    );
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t, clearCommandModeCountdown]);
+
+  // command-mode-processing → swap to spinner "Traitement en cours…"
+  useEffect(() => {
+    const unlisten = listen("command-mode-processing", () => {
+      clearCommandModeCountdown();
+      toast.loading(
+        t("commandMode.processing", { defaultValue: "Traitement en cours…" }),
+        { id: "command-mode", duration: Infinity },
+      );
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t, clearCommandModeCountdown]);
+
+  // command-mode-finished → dismiss the loading toast silently
+  useEffect(() => {
+    const unlisten = listen("command-mode-finished", () => {
+      clearCommandModeCountdown();
+      toast.dismiss("command-mode");
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [clearCommandModeCountdown]);
+
+  // command-mode-error → dismiss loading toast + show error toast
+  useEffect(() => {
+    const unlisten = listen<{ message: string }>("command-mode-error", (event) => {
+      clearCommandModeCountdown();
+      toast.dismiss("command-mode");
+      toast.error(
+        t("commandMode.errorTitle", { defaultValue: "Command Mode — erreur" }),
+        {
+          duration: 6000,
+          description: event.payload?.message,
+        },
+      );
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [t, clearCommandModeCountdown]);
+
+  // ── End Command Mode listeners ─────────────────────────────────────────────
 
   useEffect(() => {
     let cancelled = false;

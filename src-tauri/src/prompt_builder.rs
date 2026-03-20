@@ -33,6 +33,11 @@ fn context_instruction(
         } else {
             "Document dictation. Keep clean structure and complete sentences."
         }),
+        Some(AppContextCategory::Notes) => Some(if is_french {
+            "Dictee de notes. Preserve la structure markdown, les listes et les titres."
+        } else {
+            "Notes dictation. Preserve markdown structure, bullet points and headings."
+        }),
         _ => None,
     }
 }

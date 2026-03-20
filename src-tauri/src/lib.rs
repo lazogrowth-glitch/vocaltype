@@ -6,9 +6,11 @@ mod audio_feedback;
 pub mod audio_toolkit;
 pub mod cli;
 mod clipboard;
+mod command_mode;
 mod commands;
 mod context_detector;
 pub mod gemini_client;
+mod dictionary;
 mod filler;
 mod helpers;
 mod input;
@@ -19,6 +21,7 @@ mod managers;
 mod model_crypto;
 mod overlay;
 mod prompt_builder;
+mod punctuation;
 mod runtime_observability;
 mod secret_store;
 mod settings;
@@ -259,12 +262,14 @@ fn initialize_core_logic(app_handle: &AppHandle) -> Result<(), String> {
         HistoryManager::new(app_handle)
             .map_err(|err| format!("Failed to initialize history manager: {}", err))?,
     );
+    let dictionary_manager = dictionary::DictionaryManager::new(app_handle);
 
     // Add managers to Tauri's managed state
     app_handle.manage(recording_manager.clone());
     app_handle.manage(model_manager.clone());
     app_handle.manage(transcription_manager.clone());
     app_handle.manage(history_manager.clone());
+    app_handle.manage(dictionary_manager);
 
     {
         let app_handle = app_handle.clone();
@@ -624,6 +629,16 @@ pub fn run(cli_args: CliArgs) {
         commands::history::update_history_limit,
         commands::history::update_recording_retention_period,
         commands::history::reprocess_history_entry,
+        commands::dictionary::get_dictionary,
+        commands::dictionary::add_dictionary_entry,
+        commands::dictionary::remove_dictionary_entry,
+        commands::dictionary::update_dictionary_entry,
+        commands::dictionary::clear_dictionary,
+        commands::app_context::get_recent_apps,
+        commands::app_context::list_app_context_overrides,
+        commands::app_context::set_app_context_override,
+        commands::app_context::remove_app_context_override,
+        commands::app_context::set_app_context_enabled,
         commands::gemini::change_gemini_api_key_setting,
         commands::gemini::change_gemini_model_setting,
         secret_store::get_secure_auth_token,
@@ -753,6 +768,7 @@ pub fn run(cli_args: CliArgs) {
             app.manage(context_detector::ActiveAppContextState(std::sync::Mutex::new(
                 context_detector::ActiveAppContextSnapshot::default(),
             )));
+            app.manage(command_mode::CommandModeState(std::sync::Mutex::new(None)));
             app.manage(vocabulary_store::VocabularyStoreState(std::sync::Mutex::new(
                 vocabulary_store::VocabularyStore::load(&app_handle),
             )));

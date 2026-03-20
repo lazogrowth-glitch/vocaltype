@@ -97,6 +97,17 @@ pub fn handle_shortcut_event(
         return;
     }
 
+    // Command Mode: press-only (start fires on key-down, stop is a no-op).
+    // The full async pipeline is self-contained inside CommandModeAction::start().
+    if binding_id == "command_mode" {
+        if is_pressed {
+            if let Some(action) = ACTION_MAP.get(binding_id) {
+                action.start(app, binding_id, hotkey_string);
+            }
+        }
+        return;
+    }
+
     let Some(action) = ACTION_MAP.get(binding_id) else {
         warn!(
             "No action defined in ACTION_MAP for shortcut ID '{}'. Shortcut: '{}', Pressed: {}",

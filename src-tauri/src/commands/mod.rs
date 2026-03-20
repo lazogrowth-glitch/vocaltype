@@ -1,4 +1,6 @@
+pub mod app_context;
 pub mod audio;
+pub mod dictionary;
 pub mod gemini;
 pub mod history;
 pub mod models;
