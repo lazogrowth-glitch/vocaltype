@@ -560,6 +560,28 @@ impl Default for TypingTool {
     }
 }
 
+/// A voice snippet: if the entire transcription matches `trigger` (case-insensitive,
+/// trimmed), it is replaced by `expansion` before being pasted.
+#[derive(Serialize, Deserialize, Debug, Clone, Type)]
+pub struct VoiceSnippet {
+    pub id: String,
+    pub trigger: String,
+    pub expansion: String,
+}
+
+/// Apply voice snippets: if `text` (trimmed, lowercase) exactly matches a trigger,
+/// return the corresponding expansion.  Otherwise return `None`.
+pub fn apply_voice_snippets(text: &str, snippets: &[VoiceSnippet]) -> Option<String> {
+    let normalized = text.trim().to_lowercase();
+    if normalized.is_empty() {
+        return None;
+    }
+    snippets
+        .iter()
+        .find(|s| s.trigger.trim().to_lowercase() == normalized)
+        .map(|s| s.expansion.clone())
+}
+
 /* still handy for composing the initial JSON in the store ------------- */
 #[derive(Serialize, Deserialize, Debug, Clone, Type)]
 pub struct AppSettings {
@@ -671,6 +693,9 @@ pub struct AppSettings {
     /// Boost microphone gain for whisper / low-volume recording.
     #[serde(default)]
     pub whisper_mode: bool,
+    /// Voice snippets: short trigger phrases → long expansions.
+    #[serde(default)]
+    pub voice_snippets: Vec<VoiceSnippet>,
 }
 
 fn default_model() -> String {
@@ -2358,6 +2383,7 @@ pub fn get_default_settings() -> AppSettings {
         adaptive_machine_profile: None,
         app_context_enabled: default_app_context_enabled(),
         whisper_mode: false,
+        voice_snippets: Vec::new(),
     }
 }
 

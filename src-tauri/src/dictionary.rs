@@ -17,6 +17,7 @@
 use log::warn;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
+use specta::Type;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager};
@@ -27,7 +28,7 @@ const DICTIONARY_FILE: &str = "dictionary.json";
 // Public data type (serializable, used by Tauri commands)
 // ---------------------------------------------------------------------------
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct DictionaryEntry {
     pub from: String,
     pub to: String,

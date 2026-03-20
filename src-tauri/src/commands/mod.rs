@@ -4,6 +4,7 @@ pub mod dictionary;
 pub mod gemini;
 pub mod history;
 pub mod models;
+pub mod snippets;
 pub mod transcription;
 
 use crate::adaptive_runtime::{

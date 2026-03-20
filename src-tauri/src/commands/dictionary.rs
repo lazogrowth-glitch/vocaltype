@@ -6,8 +6,8 @@ use tauri::State;
 #[specta::specta]
 pub fn get_dictionary(
     dictionary: State<'_, Arc<DictionaryManager>>,
-) -> Vec<DictionaryEntry> {
-    dictionary.entries()
+) -> Result<Vec<DictionaryEntry>, String> {
+    Ok(dictionary.entries())
 }
 
 #[tauri::command]
@@ -45,4 +45,37 @@ pub fn clear_dictionary(
     dictionary: State<'_, Arc<DictionaryManager>>,
 ) -> Result<(), String> {
     dictionary.clear()
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn export_dictionary(
+    dictionary: State<'_, Arc<DictionaryManager>>,
+) -> Result<String, String> {
+    let entries = dictionary.entries();
+    serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub fn import_dictionary(
+    dictionary: State<'_, Arc<DictionaryManager>>,
+    json: String,
+    replace: bool,
+) -> Result<(), String> {
+    use crate::dictionary::DictionaryEntry;
+
+    let entries: Vec<DictionaryEntry> =
+        serde_json::from_str(&json).map_err(|e| format!("JSON invalide : {}", e))?;
+
+    if replace {
+        dictionary.clear()?;
+    }
+
+    for entry in entries {
+        // Skip if already present (when merging)
+        let _ = dictionary.add(entry.from, entry.to);
+    }
+
+    Ok(())
 }

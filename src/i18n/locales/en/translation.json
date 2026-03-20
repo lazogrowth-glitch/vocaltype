@@ -13,6 +13,8 @@
     "advanced": "Advanced",
     "postProcessing": "Post Process",
     "history": "History",
+    "snippets": "Snippets",
+    "stats": "Stats",
     "debug": "Debug",
     "about": "About"
   },
@@ -516,7 +518,13 @@
       "selectModel": "Select model",
       "originalTranscript": "Original",
       "postProcessed": "Post-processed",
-      "action": "Action {{key}}"
+      "action": "Action {{key}}",
+      "export": "Export",
+      "exportSuccess": "History exported.",
+      "exportError": "Export failed.",
+      "transcribeFile": "Transcribe File",
+      "transcribeFileSuccess": "File transcribed and copied to clipboard.",
+      "transcribeFileError": "Transcription failed."
     },
     "gemini": {
       "title": "Gemini API",
@@ -807,7 +815,38 @@
     "save": "Save",
     "cancel": "Cancel",
     "duplicate": "\"{{from}}\" is already in the dictionary.",
+    "arrow": "→",
+    "export": "Export",
+    "importMerge": "Import (merge)",
+    "exportSuccess": "Dictionary exported.",
+    "importReplaceSuccess": "Dictionary imported (replaced).",
+    "importMergeSuccess": "Dictionary imported (merged)."
+  },
+  "snippets": {
+    "title": "Voice Snippets",
+    "description": "Say the trigger phrase and VocalType will paste the expansion instead.",
+    "empty": "No snippets yet. Add one below.",
+    "triggerPlaceholder": "Trigger phrase…",
+    "expansionPlaceholder": "Text to paste…",
+    "add": "Add",
+    "remove": "Remove",
+    "save": "Save",
+    "cancel": "Cancel",
+    "duplicate": "\"{{trigger}}\" already exists.",
     "arrow": "→"
+  },
+  "stats": {
+    "title": "Statistics",
+    "totalWords": "Total Words",
+    "totalTranscriptions": "Transcriptions",
+    "today": "Today",
+    "thisWeek": "This Week",
+    "avgWords": "Avg. Words",
+    "mostUsedModel": "Most Used Model",
+    "timeSaved": "Time Saved",
+    "timeSavedUnit": "min",
+    "noData": "No data yet. Start transcribing to build your stats.",
+    "refresh": "Refresh"
   },
   "basic": {
     "copiedToClipboard": "Text copied to clipboard",

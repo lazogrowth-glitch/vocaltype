@@ -13,6 +13,8 @@
     "advanced": "Avancé",
     "postProcessing": "Post-traitement",
     "history": "Historique",
+    "snippets": "Snippets",
+    "stats": "Statistiques",
     "debug": "Débogage",
     "about": "À propos"
   },
@@ -528,7 +530,13 @@
       "action": "Action {{key}}",
       "reprocess": "Retraiter avec un autre modèle",
       "reprocessing": "Retraitement en cours...",
-      "selectModel": "Sélectionner un modèle"
+      "selectModel": "Sélectionner un modèle",
+      "export": "Exporter",
+      "exportSuccess": "Historique exporté.",
+      "exportError": "Échec de l'export.",
+      "transcribeFile": "Transcrire un fichier",
+      "transcribeFileSuccess": "Fichier transcrit et copié dans le presse-papiers.",
+      "transcribeFileError": "Échec de la transcription."
     },
     "debug": {
       "title": "Débogage",
@@ -807,7 +815,38 @@
     "save": "Sauvegarder",
     "cancel": "Annuler",
     "duplicate": "\"{{from}}\" est déjà dans le dictionnaire.",
+    "arrow": "→",
+    "export": "Exporter",
+    "importMerge": "Importer (fusionner)",
+    "exportSuccess": "Dictionnaire exporté.",
+    "importReplaceSuccess": "Dictionnaire importé (remplacé).",
+    "importMergeSuccess": "Dictionnaire importé (fusionné)."
+  },
+  "snippets": {
+    "title": "Snippets vocaux",
+    "description": "Dites la phrase déclencheur et VocalType colle l'expansion à la place.",
+    "empty": "Aucun snippet. Ajoutez-en un ci-dessous.",
+    "triggerPlaceholder": "Phrase déclencheur…",
+    "expansionPlaceholder": "Texte à coller…",
+    "add": "Ajouter",
+    "remove": "Supprimer",
+    "save": "Sauvegarder",
+    "cancel": "Annuler",
+    "duplicate": "\"{{trigger}}\" existe déjà.",
     "arrow": "→"
+  },
+  "stats": {
+    "title": "Statistiques",
+    "totalWords": "Mots totaux",
+    "totalTranscriptions": "Transcriptions",
+    "today": "Aujourd'hui",
+    "thisWeek": "Cette semaine",
+    "avgWords": "Mots moy.",
+    "mostUsedModel": "Modèle le + utilisé",
+    "timeSaved": "Temps économisé",
+    "timeSavedUnit": "min",
+    "noData": "Aucune donnée. Commencez à transcrire pour voir vos stats.",
+    "refresh": "Actualiser"
   },
   "basic": {
     "copiedToClipboard": "Texte copié dans le presse-papier",

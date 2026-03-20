@@ -44,7 +44,7 @@ const CLIPBOARD_SETTLE_MS: u64 = 150;
 
 /// Session created during `start()` and consumed in the background task.
 /// There can be at most one active command-mode session at a time.
-struct CommandModeSession {
+pub(crate) struct CommandModeSession {
     selected_text: String,
 }
 
@@ -145,23 +145,19 @@ async fn run_command_mode(app: AppHandle) {
     let clipboard_before = clipboard.read_text().unwrap_or_default();
 
     // Send Ctrl+C from a blocking thread (enigo requires blocking I/O).
-    let enigo_state = match app.try_state::<EnigoState>() {
-        Some(s) => s,
-        None => {
-            emit_error(&app, "Système d'entrée non initialisé.");
-            return;
-        }
-    };
+    if app.try_state::<EnigoState>().is_none() {
+        emit_error(&app, "Système d'entrée non initialisé.");
+        return;
+    }
 
-    let ctrl_c_result = tokio::task::spawn_blocking({
-        let enigo_state = enigo_state.inner().clone();
-        move || {
-            let mut enigo = match enigo_state.0.lock() {
-                Ok(e) => e,
-                Err(p) => p.into_inner(),
-            };
-            send_copy_ctrl_c(&mut enigo)
-        }
+    let app_for_enigo = app.clone();
+    let ctrl_c_result = tokio::task::spawn_blocking(move || {
+        let enigo_state = app_for_enigo.state::<EnigoState>();
+        let mut enigo = match enigo_state.0.lock() {
+            Ok(e) => e,
+            Err(p) => p.into_inner(),
+        };
+        send_copy_ctrl_c(&mut enigo)
     })
     .await;
 

@@ -1,15 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Pencil, Trash2, Check, X } from "lucide-react";
-import { commands } from "@/bindings";
+import { Pencil, Trash2, Check, X, Download, Upload } from "lucide-react";
+import { save, open } from "@tauri-apps/plugin-dialog";
+import { writeTextFile, readTextFile } from "@tauri-apps/plugin-fs";
+import { commands, DictionaryEntry } from "@/bindings";
 import { Button } from "../../ui/Button";
 import { Input } from "../../ui/Input";
-
-interface DictionaryEntry {
-  from: string;
-  to: string;
-}
 
 export const DictionarySettings: React.FC = () => {
   const { t } = useTranslation();
@@ -26,7 +23,11 @@ export const DictionarySettings: React.FC = () => {
   const load = async () => {
     try {
       const result = await commands.getDictionary();
-      setEntries(result);
+      if (result.status === "ok") {
+        setEntries(result.data);
+      } else {
+        setEntries([]);
+      }
     } catch {
       // dictionary file absent — silently use empty list
       setEntries([]);
@@ -108,10 +109,79 @@ export const DictionarySettings: React.FC = () => {
     }
   };
 
+  // ── Export ────────────────────────────────────────────────────────────────
+
+  const handleExport = async () => {
+    try {
+      const filePath = await save({
+        defaultPath: "vocaltype-dictionary.json",
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!filePath) return;
+      const result = await commands.exportDictionary();
+      if (result.status === "ok") {
+        await writeTextFile(filePath, result.data);
+        toast.success(t("dictionary.exportSuccess", { defaultValue: "Dictionnaire exporté." }));
+      } else {
+        toast.error(result.error);
+      }
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
+  // ── Import ────────────────────────────────────────────────────────────────
+
+  const handleImport = async (replace: boolean) => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{ name: "JSON", extensions: ["json"] }],
+      });
+      if (!selected || typeof selected !== "string") return;
+      const content = await readTextFile(selected);
+      const result = await commands.importDictionary(content, replace);
+      if (result.status === "ok") {
+        await load();
+        toast.success(
+          replace
+            ? t("dictionary.importReplaceSuccess", { defaultValue: "Dictionnaire importé (remplacé)." })
+            : t("dictionary.importMergeSuccess", { defaultValue: "Dictionnaire importé (fusionné)." }),
+        );
+      } else {
+        toast.error(result.error);
+      }
+    } catch (e) {
+      toast.error(String(e));
+    }
+  };
+
   // ─────────────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-4 pt-5">
+      {/* Export/Import toolbar */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={handleExport}
+          className="flex items-center gap-1 rounded-[6px] border border-white/8 bg-white/[0.04] px-2.5 py-1.5 text-[11.5px] text-white/45 transition-colors hover:text-white/70"
+          title={t("dictionary.export", { defaultValue: "Exporter" })}
+        >
+          <Download size={12} />
+          {t("dictionary.export", { defaultValue: "Exporter" })}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleImport(false)}
+          className="flex items-center gap-1 rounded-[6px] border border-white/8 bg-white/[0.04] px-2.5 py-1.5 text-[11.5px] text-white/45 transition-colors hover:text-white/70"
+          title={t("dictionary.importMerge", { defaultValue: "Importer (fusionner)" })}
+        >
+          <Upload size={12} />
+          {t("dictionary.importMerge", { defaultValue: "Importer" })}
+        </button>
+      </div>
+
       {/* Add row */}
       <div className="flex items-center gap-2">
         <Input

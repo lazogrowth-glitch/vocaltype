@@ -8,6 +8,10 @@ import { getLanguageDirection } from "@/lib/utils/rtl";
 
 type OverlayState = "recording" | "transcribing" | "processing";
 
+interface StreamingChunkPayload {
+  text: string;
+}
+
 interface ActionInfo {
   key: number;
   name: string;
@@ -165,6 +169,7 @@ const RecordingOverlay: React.FC = () => {
   const [selectedAction, setSelectedAction] = useState<ActionInfo | null>(null);
   const [cancelPending, setCancelPending] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [streamingText, setStreamingText] = useState<string>("");
   const cancelTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pauseStartRef = useRef<number>(0);
   const direction = getLanguageDirection(i18n.language);
@@ -191,6 +196,7 @@ const RecordingOverlay: React.FC = () => {
         if (overlayState === "recording") {
           setTimerStart(Date.now());
           setSelectedAction(null);
+          setStreamingText("");
         }
       });
 
@@ -199,6 +205,7 @@ const RecordingOverlay: React.FC = () => {
         setSelectedAction(null);
         setCancelPending(false);
         setIsPaused(false);
+        setStreamingText("");
         if (cancelTimerRef.current) {
           clearTimeout(cancelTimerRef.current);
           cancelTimerRef.current = null;
@@ -241,6 +248,16 @@ const RecordingOverlay: React.FC = () => {
         },
       );
 
+      // Real-time streaming text from Moonshine streaming models
+      const unlistenChunk = await listen<StreamingChunkPayload>(
+        "transcription-chunk",
+        (event) => {
+          setStreamingText(event.payload.text);
+          // Switch overlay to "transcribing" state to show streaming text
+          setState("transcribing");
+        },
+      );
+
       if (!isMounted) {
         unlistenShow();
         unlistenHide();
@@ -248,6 +265,7 @@ const RecordingOverlay: React.FC = () => {
         unlistenAction();
         unlistenDeselect();
         unlistenPause();
+        unlistenChunk();
         return;
       }
 
@@ -258,6 +276,7 @@ const RecordingOverlay: React.FC = () => {
         unlistenAction();
         unlistenDeselect();
         unlistenPause();
+        unlistenChunk();
       };
     };
 
@@ -297,7 +316,9 @@ const RecordingOverlay: React.FC = () => {
           </div>
         )}
         {state === "transcribing" && (
-          <div className="transcribing-text">{t("overlay.transcribing")}</div>
+          <div className="transcribing-text">
+            {streamingText || t("overlay.transcribing")}
+          </div>
         )}
         {state === "processing" && (
           <div className="transcribing-text">{t("overlay.processing")}</div>

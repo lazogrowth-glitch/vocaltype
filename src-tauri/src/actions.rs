@@ -1808,6 +1808,21 @@ impl ShortcutAction for TranscribeAction {
                         );
                     }
 
+                    // Voice snippet expansion — if the full transcription matches a trigger,
+                    // replace with the expansion and skip LLM post-processing entirely.
+                    let snippet_matched =
+                        if let Some(expanded) = crate::settings::apply_voice_snippets(
+                            &final_text,
+                            &settings.voice_snippets,
+                        ) {
+                            debug!("Voice snippet matched — expanding to {} chars", expanded.len());
+                            final_text = expanded;
+                            post_processed_text = Some(final_text.clone());
+                            true
+                        } else {
+                            false
+                        };
+
                     let selected_action = selected_action_key.and_then(|key| {
                         settings
                             .post_process_actions
@@ -1821,7 +1836,7 @@ impl ShortcutAction for TranscribeAction {
                         .map(|ctx| ctx.category.skip_post_processing())
                         .unwrap_or(false);
 
-                    if !is_code_context && (selected_action.is_some() || post_process) {
+                    if !snippet_matched && !is_code_context && (selected_action.is_some() || post_process) {
                         show_processing_overlay(&ah);
                         if let Some(coordinator) = ah.try_state::<TranscriptionCoordinator>() {
                             coordinator.notify_enter_processing();
@@ -1829,7 +1844,10 @@ impl ShortcutAction for TranscribeAction {
                     }
 
                     let post_process_started = Instant::now();
-                    let processed = if is_code_context {
+                    let processed = if snippet_matched {
+                        // Snippet already expanded — skip LLM entirely.
+                        None
+                    } else if is_code_context {
                         // Code context: skip all LLM post-processing, inject raw text.
                         debug!("Code context detected — skipping LLM post-processing");
                         None

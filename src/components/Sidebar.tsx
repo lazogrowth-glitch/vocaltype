@@ -2,12 +2,14 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlignLeft,
+  BarChart2,
   Clock3,
   FlaskConical,
   History,
   Info,
   LayoutGrid,
   Settings2,
+  Zap,
 } from "lucide-react";
 import VocalTypeLogo from "./icons/VocalTypeLogo";
 import { MachineStatusBar } from "./MachineStatusBar";
@@ -21,6 +23,8 @@ import {
   AboutSettings,
   PostProcessingSettings,
   ModelsSettings,
+  SnippetsSettings,
+  StatsSettings,
 } from "./settings";
 
 export type SidebarSection = keyof typeof SECTIONS_CONFIG;
@@ -69,6 +73,18 @@ export const SECTIONS_CONFIG = {
     labelKey: "sidebar.history",
     icon: History,
     component: HistorySettings,
+    enabled: () => true,
+  },
+  snippets: {
+    labelKey: "sidebar.snippets",
+    icon: Zap,
+    component: SnippetsSettings,
+    enabled: () => true,
+  },
+  stats: {
+    labelKey: "sidebar.stats",
+    icon: BarChart2,
+    component: StatsSettings,
     enabled: () => true,
   },
   debug: {
