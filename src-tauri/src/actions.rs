@@ -1729,6 +1729,18 @@ impl ShortcutAction for TranscribeAction {
                         );
                     }
 
+                    // Filler word removal (euh, um, je veux dire…)
+                    let filler_started = Instant::now();
+                    let before_filler = final_text.clone();
+                    final_text = crate::filler::clean_transcript(&final_text);
+                    if let Ok(mut p) = profiler.lock() {
+                        p.push_step_since(
+                            "filler_removal",
+                            filler_started,
+                            Some(format!("changed={}", final_text != before_filler)),
+                        );
+                    }
+
                     let selected_action = selected_action_key.and_then(|key| {
                         settings
                             .post_process_actions

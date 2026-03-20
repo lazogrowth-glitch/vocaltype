@@ -9,6 +9,7 @@ mod clipboard;
 mod commands;
 mod context_detector;
 pub mod gemini_client;
+mod filler;
 mod helpers;
 mod input;
 mod integrity;
