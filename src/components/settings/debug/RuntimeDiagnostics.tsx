@@ -21,7 +21,10 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
     [snapshot],
   );
   const calibrationStates = useMemo(
-    () => (snapshot?.adaptive_calibration_state ?? []).slice().sort((a, b) => b.updated_at_ms - a.updated_at_ms),
+    () =>
+      (snapshot?.adaptive_calibration_state ?? [])
+        .slice()
+        .sort((a, b) => b.updated_at_ms - a.updated_at_ms),
     [snapshot],
   );
   const adaptiveProfile = snapshot?.adaptive_machine_profile ?? null;
@@ -166,7 +169,9 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
                 defaultValue: "Cancelled at",
               })}
               :{" "}
-              <span className="font-semibold">{snapshot.cancelled_at_stage}</span>
+              <span className="font-semibold">
+                {snapshot.cancelled_at_stage}
+              </span>
             </p>
           )}
           {snapshot.partial_result && (
@@ -219,7 +224,9 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
                 })}
                 :{" "}
                 <span className="font-semibold">
-                  {adaptiveProfile.machine_tier} ({adaptiveProfile.machine_score_details.final_score.toFixed(2)})
+                  {adaptiveProfile.machine_tier} (
+                  {adaptiveProfile.machine_score_details.final_score.toFixed(2)}
+                  )
                 </span>
               </p>
               <p>
@@ -230,7 +237,9 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
                 <span className="font-semibold">
                   {adaptiveProfile.gpu_kind}
                 </span>
-                {adaptiveProfile.gpu_name ? ` · ${adaptiveProfile.gpu_name}` : ""}
+                {adaptiveProfile.gpu_name
+                  ? ` · ${adaptiveProfile.gpu_name}`
+                  : ""}
               </p>
               <p>
                 {t("settings.debug.runtimeDiagnostics.npu", {
@@ -240,7 +249,9 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
                 <span className="font-semibold">
                   {adaptiveProfile.npu_kind}
                 </span>
-                {adaptiveProfile.npu_name ? ` · ${adaptiveProfile.npu_name}` : ""}
+                {adaptiveProfile.npu_name
+                  ? ` · ${adaptiveProfile.npu_name}`
+                  : ""}
                 {" · "}
                 <span className="text-text/60">
                   {t("settings.debug.runtimeDiagnostics.copilotPlus", {
@@ -326,7 +337,9 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
                 defaultValue: "Device resolution",
               })}
               :{" "}
-              <span className="font-semibold">{snapshot.device_resolution}</span>
+              <span className="font-semibold">
+                {snapshot.device_resolution}
+              </span>
             </p>
           )}
           {snapshot.last_audio_error && (
@@ -334,7 +347,8 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
               {t("settings.debug.runtimeDiagnostics.lastAudioError", {
                 defaultValue: "Last audio error",
               })}
-              : <span className="font-semibold">{snapshot.last_audio_error}</span>
+              :{" "}
+              <span className="font-semibold">{snapshot.last_audio_error}</span>
             </p>
           )}
           <p>
@@ -409,7 +423,9 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
                       defaultValue: "Voice adjustment",
                     })}
                     :{" "}
-                    <span className="font-semibold">{voiceAdjustmentValue}</span>
+                    <span className="font-semibold">
+                      {voiceAdjustmentValue}
+                    </span>
                     {snapshot.active_voice_runtime_adjustment.reason
                       ? ` · ${snapshot.active_voice_runtime_adjustment.reason}`
                       : ""}
@@ -452,7 +468,10 @@ export const RuntimeDiagnostics: React.FC<{ grouped?: boolean }> = ({
                 })}
               </p>
               {calibrationStates.slice(0, 4).map((entry) => (
-                <p key={`${entry.model_id}-${entry.phase}`} className="truncate">
+                <p
+                  key={`${entry.model_id}-${entry.phase}`}
+                  className="truncate"
+                >
                   {entry.model_id} [{entry.phase}] {entry.state}
                   {entry.detail ? ` — ${entry.detail}` : ""}
                 </p>

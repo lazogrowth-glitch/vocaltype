@@ -134,10 +134,13 @@ export const PasteMethodSetting: React.FC<PasteMethodProps> = React.memo(
               title={t("settings.advanced.pasteMethod.premiumDirectTitle", {
                 defaultValue: "Direct insertion is reserved for Premium",
               })}
-              description={t("settings.advanced.pasteMethod.premiumDirectDescription", {
-                defaultValue:
-                  "On Basic, VocalType will still keep the result recoverable, but dictation falls back to clipboard handling instead of native direct injection.",
-              })}
+              description={t(
+                "settings.advanced.pasteMethod.premiumDirectDescription",
+                {
+                  defaultValue:
+                    "On Basic, VocalType will still keep the result recoverable, but dictation falls back to clipboard handling instead of native direct injection.",
+                },
+              )}
               actionLabel={t("basic.upgrade", {
                 defaultValue: "Upgrade to Premium",
               })}

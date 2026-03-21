@@ -88,7 +88,10 @@ export const Tooltip: React.FC<TooltipProps> = ({
 
     updatePosition(); // initial synchronous call
 
-    window.addEventListener("scroll", debouncedUpdate, { passive: true, capture: true });
+    window.addEventListener("scroll", debouncedUpdate, {
+      passive: true,
+      capture: true,
+    });
     window.addEventListener("resize", debouncedUpdate, { passive: true });
 
     return () => {

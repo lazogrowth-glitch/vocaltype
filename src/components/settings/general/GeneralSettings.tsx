@@ -64,7 +64,9 @@ export const GeneralSettings: React.FC = () => {
       </div>
 
       {activeTab === "shortcuts" && (
-        <SettingsGroup title={t("settings.general.tabs.keyboardShortcutsTitle")}>
+        <SettingsGroup
+          title={t("settings.general.tabs.keyboardShortcutsTitle")}
+        >
           {shouldShowWarmupNotice && (
             <div
               className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-[12px] ${
@@ -87,11 +89,10 @@ export const GeneralSettings: React.FC = () => {
                 )}
               </div>
               <div className="min-w-0">
-                <p className="font-medium leading-5">
-                  {warmupStatus.message}
-                </p>
+                <p className="font-medium leading-5">{warmupStatus.message}</p>
                 <p className="mt-1 leading-5 text-white/55">
-                  {warmupStatus.detail || getStartupWarmupFallbackDetail(warmupStatus)}
+                  {warmupStatus.detail ||
+                    getStartupWarmupFallbackDetail(warmupStatus)}
                 </p>
               </div>
             </div>
@@ -115,11 +116,31 @@ export const GeneralSettings: React.FC = () => {
               }}
             />
           )}
-          <ShortcutInput shortcutId="transcribe" grouped={true} disabled={isBasicTier} />
-          <ShortcutInput shortcutId="cancel" grouped={true} disabled={isBasicTier} />
-          <ShortcutInput shortcutId="pause" grouped={true} disabled={isBasicTier} />
-          <ShortcutInput shortcutId="show_history" grouped={true} disabled={isBasicTier} />
-          <ShortcutInput shortcutId="copy_latest_history" grouped={true} disabled={isBasicTier} />
+          <ShortcutInput
+            shortcutId="transcribe"
+            grouped={true}
+            disabled={isBasicTier}
+          />
+          <ShortcutInput
+            shortcutId="cancel"
+            grouped={true}
+            disabled={isBasicTier}
+          />
+          <ShortcutInput
+            shortcutId="pause"
+            grouped={true}
+            disabled={isBasicTier}
+          />
+          <ShortcutInput
+            shortcutId="show_history"
+            grouped={true}
+            disabled={isBasicTier}
+          />
+          <ShortcutInput
+            shortcutId="copy_latest_history"
+            grouped={true}
+            disabled={isBasicTier}
+          />
           <RecordingModeSelector grouped={true} />
           {/* ── Command Mode ─────────────────────────────────────────── */}
           <div className="flex items-center gap-1.5 border-t border-white/6 px-4 pb-0.5 pt-2">
@@ -130,7 +151,11 @@ export const GeneralSettings: React.FC = () => {
               {t("basic.premiumBadge", { defaultValue: "Premium" })}
             </span>
           </div>
-          <ShortcutInput shortcutId="command_mode" grouped={true} disabled={isBasicTier} />
+          <ShortcutInput
+            shortcutId="command_mode"
+            grouped={true}
+            disabled={isBasicTier}
+          />
           {/* ── Whisper Mode ─────────────────────────────────────────── */}
           <div className="flex items-center gap-1.5 border-t border-white/6 px-4 pb-0.5 pt-2">
             <span className="text-[10.5px] text-white/40">

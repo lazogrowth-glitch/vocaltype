@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { getKeyName, formatKeyCombination, normalizeKey } from "./keyboard";
 
 const makeEvent = (overrides: Partial<KeyboardEvent>): KeyboardEvent =>
-  ({ code: "", key: "", keyCode: 0, which: 0, ...overrides } as KeyboardEvent);
+  ({ code: "", key: "", keyCode: 0, which: 0, ...overrides }) as KeyboardEvent;
 
 describe("getKeyName", () => {
   it("converts letter code to lowercase", () => {
@@ -33,11 +33,15 @@ describe("getKeyName", () => {
   });
 
   it("converts MetaLeft to 'super' on non-mac", () => {
-    expect(getKeyName(makeEvent({ code: "MetaLeft" }), "windows")).toBe("super");
+    expect(getKeyName(makeEvent({ code: "MetaLeft" }), "windows")).toBe(
+      "super",
+    );
   });
 
   it("converts MetaLeft to 'command' on macOS", () => {
-    expect(getKeyName(makeEvent({ code: "MetaLeft" }), "macos")).toBe("command");
+    expect(getKeyName(makeEvent({ code: "MetaLeft" }), "macos")).toBe(
+      "command",
+    );
   });
 
   it("converts AltLeft to 'option' on macOS", () => {

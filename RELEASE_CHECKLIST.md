@@ -17,6 +17,7 @@ LICENSE_APPROVED_BUILD_HASHES=
 ```
 
 But:
+
 - laisser l'app evoluer sans se bloquer soi-meme
 - garder les logs d'anomalies
 - ne pas casser les builds de test

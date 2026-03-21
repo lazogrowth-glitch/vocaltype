@@ -205,7 +205,11 @@ const RecordingOverlay: React.FC = () => {
 
     const register = (eventName: string, handler: any) => {
       listen(eventName, handler).then((fn) => {
-        if (!active) { fn(); } else { cleanups.push(fn); }
+        if (!active) {
+          fn();
+        } else {
+          cleanups.push(fn);
+        }
       });
     };
 
@@ -234,7 +238,8 @@ const RecordingOverlay: React.FC = () => {
 
     register("transcription-lifecycle", async (event: any) => {
       await syncLanguageFromSettings();
-      const lifecycleState = (event.payload as LifecycleStateEventPayload).state;
+      const lifecycleState = (event.payload as LifecycleStateEventPayload)
+        .state;
       if (
         lifecycleState === "idle" ||
         lifecycleState === "completed" ||
@@ -310,7 +315,6 @@ const RecordingOverlay: React.FC = () => {
       }
     });
 
-
     return () => {
       active = false;
       cleanups.forEach((fn) => fn());
@@ -326,7 +330,11 @@ const RecordingOverlay: React.FC = () => {
       className={`recording-overlay state-${state} ${isVisible ? "is-visible" : "is-hidden"}`}
     >
       <div className="overlay-left">
-        {state === "recording" || state === "preparing" ? <MicIcon /> : <DotsIcon />}
+        {state === "recording" || state === "preparing" ? (
+          <MicIcon />
+        ) : (
+          <DotsIcon />
+        )}
       </div>
 
       {selectedAction && state === "recording" && (

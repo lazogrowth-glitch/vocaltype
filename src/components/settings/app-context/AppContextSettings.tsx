@@ -3,7 +3,11 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { RefreshCw, X } from "lucide-react";
 import { commands } from "@/bindings";
-import type { AppContextCategory, AppContextOverride, RecentAppEntry } from "@/bindings";
+import type {
+  AppContextCategory,
+  AppContextOverride,
+  RecentAppEntry,
+} from "@/bindings";
 import { useSettings } from "../../../hooks/useSettings";
 import { ToggleSwitch } from "../../ui/ToggleSwitch";
 import { Button } from "../../ui/Button";
@@ -40,16 +44,28 @@ function categoryLabel(category: AppContextCategory, t: TFunction): string {
   }
 }
 
-type BadgeVariant = "primary" | "success" | "secondary" | "quality" | "speed" | "experimental";
+type BadgeVariant =
+  | "primary"
+  | "success"
+  | "secondary"
+  | "quality"
+  | "speed"
+  | "experimental";
 
 function categoryBadgeVariant(category: AppContextCategory): BadgeVariant {
   switch (category) {
-    case "code":     return "speed";
-    case "email":    return "primary";
-    case "chat":     return "success";
-    case "notes":    return "secondary";
-    case "document": return "quality";
-    default:         return "secondary";
+    case "code":
+      return "speed";
+    case "email":
+      return "primary";
+    case "chat":
+      return "success";
+    case "notes":
+      return "secondary";
+    case "document":
+      return "quality";
+    default:
+      return "secondary";
   }
 }
 
@@ -66,7 +82,11 @@ interface CategorySelectProps {
   disabled?: boolean;
 }
 
-const CategorySelect: React.FC<CategorySelectProps> = ({ value, onChange, disabled }) => {
+const CategorySelect: React.FC<CategorySelectProps> = ({
+  value,
+  onChange,
+  disabled,
+}) => {
   const { t } = useTranslation();
 
   return (
@@ -135,7 +155,9 @@ export const AppContextSettings: React.FC = () => {
 
   // ── Overrides ─────────────────────────────────────────────────────────────
 
-  const overrideMap = new Map(overrides.map((o) => [o.process_name, o.category]));
+  const overrideMap = new Map(
+    overrides.map((o) => [o.process_name, o.category]),
+  );
 
   const handleCategoryChange = async (
     processName: string,
@@ -144,11 +166,15 @@ export const AppContextSettings: React.FC = () => {
     try {
       if (value === "auto") {
         await commands.removeAppContextOverride(processName);
-        setOverrides((prev) => prev.filter((o) => o.process_name !== processName));
+        setOverrides((prev) =>
+          prev.filter((o) => o.process_name !== processName),
+        );
       } else {
         await commands.setAppContextOverride(processName, value);
         setOverrides((prev) => {
-          const existing = prev.findIndex((o) => o.process_name === processName);
+          const existing = prev.findIndex(
+            (o) => o.process_name === processName,
+          );
           if (existing >= 0) {
             const next = [...prev];
             next[existing] = { process_name: processName, category: value };
@@ -165,7 +191,9 @@ export const AppContextSettings: React.FC = () => {
   const handleRemoveOverride = async (processName: string) => {
     try {
       await commands.removeAppContextOverride(processName);
-      setOverrides((prev) => prev.filter((o) => o.process_name !== processName));
+      setOverrides((prev) =>
+        prev.filter((o) => o.process_name !== processName),
+      );
     } catch {
       // ignore
     }
@@ -236,7 +264,8 @@ export const AppContextSettings: React.FC = () => {
           <div className="overflow-hidden rounded-[8px] border border-white/8">
             {recentApps.map((app, i) => {
               const currentOverride = overrideMap.get(app.process_name);
-              const selectValue: AppContextCategory | "auto" = currentOverride ?? "auto";
+              const selectValue: AppContextCategory | "auto" =
+                currentOverride ?? "auto";
               const displayCategory = currentOverride ?? app.category;
 
               return (
@@ -252,7 +281,9 @@ export const AppContextSettings: React.FC = () => {
                       {displayProcessName(app.process_name)}
                     </p>
                     {app.window_title && (
-                      <p className="truncate text-[10.5px] text-white/30">{app.window_title}</p>
+                      <p className="truncate text-[10.5px] text-white/30">
+                        {app.window_title}
+                      </p>
                     )}
                   </div>
 
@@ -261,7 +292,9 @@ export const AppContextSettings: React.FC = () => {
                     {categoryLabel(displayCategory, t)}
                     {currentOverride && (
                       <span className="ml-1 opacity-60">
-                        {t("appContext.overrideIndicator", { defaultValue: "(forcé)" })}
+                        {t("appContext.overrideIndicator", {
+                          defaultValue: "(forcé)",
+                        })}
                       </span>
                     )}
                   </Badge>
@@ -269,7 +302,9 @@ export const AppContextSettings: React.FC = () => {
                   {/* Category override selector */}
                   <CategorySelect
                     value={selectValue}
-                    onChange={(val) => handleCategoryChange(app.process_name, val)}
+                    onChange={(val) =>
+                      handleCategoryChange(app.process_name, val)
+                    }
                   />
                 </div>
               );
@@ -282,14 +317,18 @@ export const AppContextSettings: React.FC = () => {
       {standaloneOverrides.length > 0 && (
         <div className={enabled ? "" : "pointer-events-none opacity-40"}>
           <p className="mb-2 text-[12px] font-medium text-white/50">
-            {t("appContext.otherOverrides", { defaultValue: "Autres overrides" })}
+            {t("appContext.otherOverrides", {
+              defaultValue: "Autres overrides",
+            })}
           </p>
           <div className="overflow-hidden rounded-[8px] border border-white/8">
             {standaloneOverrides.map((ov, i) => (
               <div
                 key={ov.process_name}
                 className={`flex items-center gap-3 px-3 py-2.5 ${
-                  i < standaloneOverrides.length - 1 ? "border-b border-white/6" : ""
+                  i < standaloneOverrides.length - 1
+                    ? "border-b border-white/6"
+                    : ""
                 }`}
               >
                 <p className="min-w-0 flex-1 truncate text-[12.5px] text-white/70">
@@ -303,7 +342,9 @@ export const AppContextSettings: React.FC = () => {
                   size="sm"
                   onClick={() => handleRemoveOverride(ov.process_name)}
                   className="shrink-0 text-white/30 hover:text-red-400"
-                  title={t("appContext.removeOverride", { defaultValue: "Supprimer l'override" })}
+                  title={t("appContext.removeOverride", {
+                    defaultValue: "Supprimer l'override",
+                  })}
                 >
                   <X className="h-3 w-3" />
                 </Button>
@@ -316,7 +357,9 @@ export const AppContextSettings: React.FC = () => {
       {/* ── How it works ───────────────────────────────────────────────────── */}
       <div className="rounded-[8px] border border-white/6 bg-white/[0.02] px-4 py-3">
         <p className="mb-1.5 text-[11px] font-medium text-white/40">
-          {t("appContext.howItWorks", { defaultValue: "Comment ça fonctionne" })}
+          {t("appContext.howItWorks", {
+            defaultValue: "Comment ça fonctionne",
+          })}
         </p>
         <ul className="space-y-1 text-[11px] text-white/30">
           <li>

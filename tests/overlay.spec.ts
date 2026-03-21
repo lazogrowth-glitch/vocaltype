@@ -37,7 +37,9 @@ test.describe("Overlay window", () => {
   test("overlay body has transparent background style", async ({ page }) => {
     await page.goto("/src/overlay/");
     const bg = await page.evaluate(
-      () => document.body.style.background || getComputedStyle(document.body).background,
+      () =>
+        document.body.style.background ||
+        getComputedStyle(document.body).background,
     );
     expect(
       bg.includes("transparent") || bg.includes("rgba(0, 0, 0, 0)"),

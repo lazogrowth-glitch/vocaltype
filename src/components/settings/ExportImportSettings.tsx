@@ -31,9 +31,7 @@ export const ExportImportSettings: React.FC<ExportImportSettingsProps> = ({
         setStatus(result.error);
       }
     } catch (err) {
-      setStatus(
-        err instanceof Error ? err.message : "Export failed",
-      );
+      setStatus(err instanceof Error ? err.message : "Export failed");
     }
     setTimeout(() => setStatus(null), 3000);
   };
@@ -53,9 +51,7 @@ export const ExportImportSettings: React.FC<ExportImportSettingsProps> = ({
         setStatus(result.error);
       }
     } catch (err) {
-      setStatus(
-        err instanceof Error ? err.message : "Import failed",
-      );
+      setStatus(err instanceof Error ? err.message : "Import failed");
     }
     setTimeout(() => setStatus(null), 3000);
   };

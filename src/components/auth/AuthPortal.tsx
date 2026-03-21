@@ -514,7 +514,10 @@ export const AuthPortal = ({
                       onSubmit={handleChangePassword}
                     >
                       <div className="space-y-1">
-                        <label htmlFor="change-old-pwd" className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">
+                        <label
+                          htmlFor="change-old-pwd"
+                          className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
+                        >
                           {t("auth.oldPassword")}
                         </label>
                         <input
@@ -529,7 +532,10 @@ export const AuthPortal = ({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="change-new-pwd" className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">
+                        <label
+                          htmlFor="change-new-pwd"
+                          className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
+                        >
                           {t("auth.newPassword")}
                         </label>
                         <input
@@ -544,7 +550,10 @@ export const AuthPortal = ({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label htmlFor="change-confirm-pwd" className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">
+                        <label
+                          htmlFor="change-confirm-pwd"
+                          className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
+                        >
                           {t("auth.confirmPassword")}
                         </label>
                         <input
@@ -611,7 +620,10 @@ export const AuthPortal = ({
                 ) : forgotStep === "email" ? (
                   <form className="space-y-4" onSubmit={handleForgotSendCode}>
                     <div className="space-y-1">
-                      <label htmlFor="forgot-email" className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">
+                      <label
+                        htmlFor="forgot-email"
+                        className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
+                      >
                         {t("auth.fields.email")}
                       </label>
                       <input
@@ -659,7 +671,10 @@ export const AuthPortal = ({
                     </p>
 
                     <div className="space-y-1">
-                      <label htmlFor="forgot-code" className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">
+                      <label
+                        htmlFor="forgot-code"
+                        className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
+                      >
                         {t("auth.verificationCode")}
                       </label>
                       <input
@@ -675,7 +690,10 @@ export const AuthPortal = ({
                     </div>
 
                     <div className="space-y-1">
-                      <label htmlFor="forgot-new-pwd" className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">
+                      <label
+                        htmlFor="forgot-new-pwd"
+                        className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
+                      >
                         {t("auth.newPassword")}
                       </label>
                       <input
@@ -691,7 +709,10 @@ export const AuthPortal = ({
                     </div>
 
                     <div className="space-y-1">
-                      <label htmlFor="forgot-confirm-pwd" className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">
+                      <label
+                        htmlFor="forgot-confirm-pwd"
+                        className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
+                      >
                         {t("auth.confirmPassword")}
                       </label>
                       <input
@@ -738,7 +759,10 @@ export const AuthPortal = ({
               <form className="space-y-4" onSubmit={handleSubmit}>
                 {mode === "register" ? (
                   <div className="space-y-1">
-                    <label htmlFor="auth-name" className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">
+                    <label
+                      htmlFor="auth-name"
+                      className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
+                    >
                       {t("auth.fields.name")}
                     </label>
                     <input
@@ -752,7 +776,10 @@ export const AuthPortal = ({
                 ) : null}
 
                 <div className="space-y-1">
-                  <label htmlFor="auth-email" className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">
+                  <label
+                    htmlFor="auth-email"
+                    className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
+                  >
                     {t("auth.fields.email")}
                   </label>
                   <input
@@ -768,7 +795,10 @@ export const AuthPortal = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label htmlFor="auth-password" className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55">
+                  <label
+                    htmlFor="auth-password"
+                    className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
+                  >
                     {t("auth.fields.password")}
                   </label>
                   <input

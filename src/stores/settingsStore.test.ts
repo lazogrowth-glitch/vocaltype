@@ -68,7 +68,9 @@ beforeEach(() => {
 
 describe("settingsStore.updateSetting", () => {
   it("optimistically updates the setting", async () => {
-    vi.mocked(commands.changeAudioFeedbackSetting).mockResolvedValue(undefined as never);
+    vi.mocked(commands.changeAudioFeedbackSetting).mockResolvedValue(
+      undefined as never,
+    );
     useSettingsStore.setState({ settings: { ...mockSettings } });
 
     await useSettingsStore.getState().updateSetting("audio_feedback", false);
@@ -81,7 +83,9 @@ describe("settingsStore.updateSetting", () => {
     vi.mocked(commands.changeAudioFeedbackSetting).mockRejectedValue(
       new Error("Rust command failed"),
     );
-    useSettingsStore.setState({ settings: { ...mockSettings, audio_feedback: true } });
+    useSettingsStore.setState({
+      settings: { ...mockSettings, audio_feedback: true },
+    });
 
     await useSettingsStore.getState().updateSetting("audio_feedback", false);
 
@@ -90,21 +94,29 @@ describe("settingsStore.updateSetting", () => {
   });
 
   it("clears isUpdating flag after success", async () => {
-    vi.mocked(commands.changeAudioFeedbackSetting).mockResolvedValue(undefined as never);
+    vi.mocked(commands.changeAudioFeedbackSetting).mockResolvedValue(
+      undefined as never,
+    );
     useSettingsStore.setState({ settings: { ...mockSettings } });
 
     await useSettingsStore.getState().updateSetting("audio_feedback", false);
 
-    expect(useSettingsStore.getState().isUpdating["audio_feedback"]).toBeFalsy();
+    expect(
+      useSettingsStore.getState().isUpdating["audio_feedback"],
+    ).toBeFalsy();
   });
 
   it("clears isUpdating flag after failure", async () => {
-    vi.mocked(commands.changeAudioFeedbackSetting).mockRejectedValue(new Error("fail"));
+    vi.mocked(commands.changeAudioFeedbackSetting).mockRejectedValue(
+      new Error("fail"),
+    );
     useSettingsStore.setState({ settings: { ...mockSettings } });
 
     await useSettingsStore.getState().updateSetting("audio_feedback", false);
 
-    expect(useSettingsStore.getState().isUpdating["audio_feedback"]).toBeFalsy();
+    expect(
+      useSettingsStore.getState().isUpdating["audio_feedback"],
+    ).toBeFalsy();
   });
 });
 
@@ -122,7 +134,9 @@ describe("settingsStore.refreshSettings", () => {
   });
 
   it("sets isLoading false even on error", async () => {
-    vi.mocked(commands.getAppSettings).mockRejectedValue(new Error("network error"));
+    vi.mocked(commands.getAppSettings).mockRejectedValue(
+      new Error("network error"),
+    );
 
     await useSettingsStore.getState().refreshSettings();
 

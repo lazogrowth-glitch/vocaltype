@@ -17,13 +17,11 @@ export const hasTauriRuntime = () => {
 
   return Boolean(
     window.__TAURI_INTERNALS__?.invoke &&
-      window.__TAURI_INTERNALS__?.transformCallback,
+    window.__TAURI_INTERNALS__?.transformCallback,
   );
 };
 
-export const waitForTauriRuntime = async (
-  timeoutMs = DEFAULT_TIMEOUT_MS,
-) => {
+export const waitForTauriRuntime = async (timeoutMs = DEFAULT_TIMEOUT_MS) => {
   if (hasTauriRuntime()) {
     return true;
   }

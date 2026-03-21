@@ -14,7 +14,10 @@ vi.mock("@/bindings", () => ({
 }));
 
 import { commands } from "@/bindings";
-const mockCommands = commands as unknown as Record<string, ReturnType<typeof vi.fn>>;
+const mockCommands = commands as unknown as Record<
+  string,
+  ReturnType<typeof vi.fn>
+>;
 
 const resetStore = () =>
   useModelStore.setState({
@@ -91,7 +94,10 @@ describe("modelStore — loadModels", () => {
   });
 
   it("sets error on failure result", async () => {
-    mockCommands.getAvailableModels.mockResolvedValue({ status: "error", error: "backend error" });
+    mockCommands.getAvailableModels.mockResolvedValue({
+      status: "error",
+      error: "backend error",
+    });
     await useModelStore.getState().loadModels();
     expect(useModelStore.getState().error).toContain("backend error");
     expect(useModelStore.getState().loading).toBe(false);
@@ -107,7 +113,10 @@ describe("modelStore — loadModels", () => {
 
 describe("modelStore — loadCurrentModel", () => {
   it("sets currentModel on success", async () => {
-    mockCommands.getCurrentModel.mockResolvedValue({ status: "ok", data: "whisper-small" });
+    mockCommands.getCurrentModel.mockResolvedValue({
+      status: "ok",
+      data: "whisper-small",
+    });
     await useModelStore.getState().loadCurrentModel();
     expect(useModelStore.getState().currentModel).toBe("whisper-small");
   });
@@ -115,7 +124,10 @@ describe("modelStore — loadCurrentModel", () => {
 
 describe("modelStore — checkFirstRun", () => {
   it("sets isFirstRun=true when no models available", async () => {
-    mockCommands.hasAnyModelsAvailable.mockResolvedValue({ status: "ok", data: false });
+    mockCommands.hasAnyModelsAvailable.mockResolvedValue({
+      status: "ok",
+      data: false,
+    });
     const result = await useModelStore.getState().checkFirstRun();
     expect(result).toBe(true);
     expect(useModelStore.getState().isFirstRun).toBe(true);
@@ -123,7 +135,10 @@ describe("modelStore — checkFirstRun", () => {
   });
 
   it("sets isFirstRun=false when models exist", async () => {
-    mockCommands.hasAnyModelsAvailable.mockResolvedValue({ status: "ok", data: true });
+    mockCommands.hasAnyModelsAvailable.mockResolvedValue({
+      status: "ok",
+      data: true,
+    });
     const result = await useModelStore.getState().checkFirstRun();
     expect(result).toBe(false);
     expect(useModelStore.getState().isFirstRun).toBe(false);
@@ -148,7 +163,10 @@ describe("modelStore — selectModel", () => {
   });
 
   it("sets error and returns false on failure", async () => {
-    mockCommands.setActiveModel.mockResolvedValue({ status: "error", error: "not found" });
+    mockCommands.setActiveModel.mockResolvedValue({
+      status: "error",
+      error: "not found",
+    });
     const result = await useModelStore.getState().selectModel("bad");
     expect(result).toBe(false);
     expect(useModelStore.getState().error).toContain("not found");
@@ -164,7 +182,10 @@ describe("modelStore — downloadModel", () => {
   });
 
   it("clears downloading state and sets error on failure", async () => {
-    mockCommands.downloadModel.mockResolvedValue({ status: "error", error: "server error" });
+    mockCommands.downloadModel.mockResolvedValue({
+      status: "error",
+      error: "server error",
+    });
     const result = await useModelStore.getState().downloadModel("m1");
     expect(result).toBe(false);
     expect(useModelStore.getState().isModelDownloading("m1")).toBe(false);
@@ -190,7 +211,9 @@ describe("modelStore — cancelDownload", () => {
 
 describe("modelStore — selectors", () => {
   it("getModelInfo returns model by id", () => {
-    useModelStore.setState({ models: [{ id: "m1", name: "Model 1" }] as never });
+    useModelStore.setState({
+      models: [{ id: "m1", name: "Model 1" }] as never,
+    });
     expect(useModelStore.getState().getModelInfo("m1")?.id).toBe("m1");
     expect(useModelStore.getState().getModelInfo("missing")).toBeUndefined();
   });
@@ -208,9 +231,16 @@ describe("modelStore — selectors", () => {
   });
 
   it("getDownloadProgress returns progress for known model", () => {
-    const progress = { model_id: "m1", downloaded: 50, total: 100, percentage: 50 };
+    const progress = {
+      model_id: "m1",
+      downloaded: 50,
+      total: 100,
+      percentage: 50,
+    };
     useModelStore.setState({ downloadProgress: { m1: progress } });
-    expect(useModelStore.getState().getDownloadProgress("m1")).toEqual(progress);
+    expect(useModelStore.getState().getDownloadProgress("m1")).toEqual(
+      progress,
+    );
     expect(useModelStore.getState().getDownloadProgress("m2")).toBeUndefined();
   });
 });

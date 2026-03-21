@@ -7,7 +7,8 @@ const CUSTOM_ERROR_LABEL = "Custom error";
 
 vi.mock("i18next", () => ({
   default: {
-    t: (_key: string, opts?: { defaultValue?: string }) => opts?.defaultValue ?? "",
+    t: (_key: string, opts?: { defaultValue?: string }) =>
+      opts?.defaultValue ?? "",
   },
 }));
 

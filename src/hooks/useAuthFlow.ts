@@ -7,12 +7,16 @@ import { licenseClient } from "@/lib/license/client";
 import type { LicenseRuntimeState } from "@/lib/license/types";
 import { useSessionRefresh } from "./useSessionRefresh";
 
-export function useAuthFlow(t: (key: string, options?: Record<string, unknown>) => string) {
+export function useAuthFlow(
+  t: (key: string, options?: Record<string, unknown>) => string,
+) {
   const [authLoading, setAuthLoading] = useState(true);
   const [authSubmitting, setAuthSubmitting] = useState(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
-  const [licenseState, setLicenseState] = useState<LicenseRuntimeState | null>(null);
+  const [licenseState, setLicenseState] = useState<LicenseRuntimeState | null>(
+    null,
+  );
   const [showTrialWelcome, setShowTrialWelcome] = useState(false);
   const hasCompletedPostOnboardingInit = useRef(false);
   const trialReminderShownRef = useRef(false);
@@ -221,13 +225,18 @@ export function useAuthFlow(t: (key: string, options?: Record<string, unknown>) 
         {
           duration: Infinity,
           description: t("trial.reminder.desc", {
-            defaultValue: "Passe à Premium pour garder l'injection native, tes raccourcis et tes transcriptions illimitées.",
+            defaultValue:
+              "Passe à Premium pour garder l'injection native, tes raccourcis et tes transcriptions illimitées.",
           }),
           action: {
-            label: t("trial.reminder.cta", { defaultValue: "Passer à Premium →" }),
+            label: t("trial.reminder.cta", {
+              defaultValue: "Passer à Premium →",
+            }),
             onClick: () => {
               handleStartCheckout()
-                .then((url) => { if (url) window.open(url, "_blank"); })
+                .then((url) => {
+                  if (url) window.open(url, "_blank");
+                })
                 .catch(() => {});
             },
           },
@@ -239,20 +248,27 @@ export function useAuthFlow(t: (key: string, options?: Record<string, unknown>) 
   // Basic plan: text copied to clipboard instead of injected
   useEffect(() => {
     const unlisten = listen("basic-copied-to-clipboard", () => {
-      toast.info(t("basic.copiedToClipboard", { defaultValue: "Texte copié dans le presse-papier" }), {
-        duration: 5000,
-        description: t("basic.copiedToClipboardDesc", {
-          defaultValue: "L'injection directe est réservée au plan Premium.",
+      toast.info(
+        t("basic.copiedToClipboard", {
+          defaultValue: "Texte copié dans le presse-papier",
         }),
-        action: {
-          label: t("basic.seePremium", { defaultValue: "Voir Premium →" }),
-          onClick: () => {
-            handleStartCheckout()
-              .then((url) => { if (url) window.open(url, "_blank"); })
-              .catch(() => {});
+        {
+          duration: 5000,
+          description: t("basic.copiedToClipboardDesc", {
+            defaultValue: "L'injection directe est réservée au plan Premium.",
+          }),
+          action: {
+            label: t("basic.seePremium", { defaultValue: "Voir Premium →" }),
+            onClick: () => {
+              handleStartCheckout()
+                .then((url) => {
+                  if (url) window.open(url, "_blank");
+                })
+                .catch(() => {});
+            },
           },
         },
-      });
+      );
     });
     return () => {
       unlisten.then((fn) => fn());
@@ -266,23 +282,30 @@ export function useAuthFlow(t: (key: string, options?: Record<string, unknown>) 
       (event) => {
         const { count, limit } = event.payload;
         toast.error(
-          t("basic.quotaExceeded", { defaultValue: "Limite atteinte pour cette semaine" }),
+          t("basic.quotaExceeded", {
+            defaultValue: "Limite atteinte pour cette semaine",
+          }),
           {
             duration: Infinity,
             description: t("basic.quotaExceededDesc", {
               defaultValue: "Passe à Premium pour dicter sans limite.",
             }),
             action: {
-              label: t("basic.upgradeCta", { defaultValue: "Passer à Premium →" }),
+              label: t("basic.upgradeCta", {
+                defaultValue: "Passer à Premium →",
+              }),
               onClick: () => {
                 handleStartCheckout()
-                  .then((url) => { if (url) window.open(url, "_blank"); })
+                  .then((url) => {
+                    if (url) window.open(url, "_blank");
+                  })
                   .catch(() => {});
               },
             },
           },
         );
-        void count; void limit;
+        void count;
+        void limit;
       },
     );
     return () => {
@@ -329,10 +352,14 @@ export function useAuthFlow(t: (key: string, options?: Record<string, unknown>) 
       ) {
         try {
           const integrity = await licenseClient.getIntegritySnapshot();
-          await licenseClient.reportAnomaly(token, "desktop_integrity_runtime", {
-            runtime,
-            integrity,
-          });
+          await licenseClient.reportAnomaly(
+            token,
+            "desktop_integrity_runtime",
+            {
+              runtime,
+              integrity,
+            },
+          );
         } catch (error) {
           console.warn("Failed to report integrity anomaly:", error);
         }

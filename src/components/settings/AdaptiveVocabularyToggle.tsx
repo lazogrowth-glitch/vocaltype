@@ -18,7 +18,9 @@ export const AdaptiveVocabularyToggle: React.FC<AdaptiveVocabularyToggleProps> =
     return (
       <ToggleSwitch
         checked={enabled}
-        onChange={(value) => updateSetting("adaptive_vocabulary_enabled", value)}
+        onChange={(value) =>
+          updateSetting("adaptive_vocabulary_enabled", value)
+        }
         isUpdating={isUpdating("adaptive_vocabulary_enabled")}
         label={t("settings.advanced.adaptiveVocabulary.label", {
           defaultValue: "Vocabulaire adaptatif",

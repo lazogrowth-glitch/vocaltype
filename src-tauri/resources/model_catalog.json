@@ -1,9 +1,7 @@
 {
   "version": 1,
   "language_sets": {
-    "english_only": [
-      "en"
-    ],
+    "english_only": ["en"],
     "whisper_all": [
       "en",
       "zh",
@@ -135,15 +133,7 @@
       "ru",
       "uk"
     ],
-    "sense_voice": [
-      "zh",
-      "zh-Hans",
-      "zh-Hant",
-      "en",
-      "yue",
-      "ja",
-      "ko"
-    ]
+    "sense_voice": ["zh", "zh-Hans", "zh-Hant", "en", "yue", "ja", "ko"]
   },
   "models": [
     {

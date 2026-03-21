@@ -121,7 +121,11 @@ export const DictionarySettings: React.FC = () => {
       const result = await commands.exportDictionary();
       if (result.status === "ok") {
         await writeTextFile(filePath, result.data);
-        toast.success(t("dictionary.exportSuccess", { defaultValue: "Dictionnaire exporté." }));
+        toast.success(
+          t("dictionary.exportSuccess", {
+            defaultValue: "Dictionnaire exporté.",
+          }),
+        );
       } else {
         toast.error(result.error);
       }
@@ -145,8 +149,12 @@ export const DictionarySettings: React.FC = () => {
         await load();
         toast.success(
           replace
-            ? t("dictionary.importReplaceSuccess", { defaultValue: "Dictionnaire importé (remplacé)." })
-            : t("dictionary.importMergeSuccess", { defaultValue: "Dictionnaire importé (fusionné)." }),
+            ? t("dictionary.importReplaceSuccess", {
+                defaultValue: "Dictionnaire importé (remplacé).",
+              })
+            : t("dictionary.importMergeSuccess", {
+                defaultValue: "Dictionnaire importé (fusionné).",
+              }),
         );
       } else {
         toast.error(result.error);
@@ -175,7 +183,9 @@ export const DictionarySettings: React.FC = () => {
           type="button"
           onClick={() => handleImport(false)}
           className="flex items-center gap-1 rounded-[6px] border border-white/8 bg-white/[0.04] px-2.5 py-1.5 text-[11.5px] text-white/45 transition-colors hover:text-white/70"
-          title={t("dictionary.importMerge", { defaultValue: "Importer (fusionner)" })}
+          title={t("dictionary.importMerge", {
+            defaultValue: "Importer (fusionner)",
+          })}
         >
           <Upload size={12} />
           {t("dictionary.importMerge", { defaultValue: "Importer" })}

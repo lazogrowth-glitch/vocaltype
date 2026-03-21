@@ -132,7 +132,9 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
 
   const modeCards = (() => {
     const appIsEnglish = i18n.language.startsWith("en");
-    const rapidId = (appIsEnglish ? "parakeet-tdt-0.6b-v3-english" : "parakeet-tdt-0.6b-v3-multilingual");
+    const rapidId = appIsEnglish
+      ? "parakeet-tdt-0.6b-v3-english"
+      : "parakeet-tdt-0.6b-v3-multilingual";
     const balancedId =
       adaptiveProfile?.machine_tier === "low" ? "small" : "turbo";
     const qualityId = "large";
@@ -149,10 +151,9 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected }) => {
         id: "fast",
         title: t("onboarding.mode.fast", { defaultValue: "Rapide" }),
         description: t("onboarding.mode.fastDescription", {
-          defaultValue:
-            isCopilotOptimizedParakeet(adaptiveProfile, rapidId)
-              ? "Lowest latency with the NPU path on this PC"
-              : "Lowest latency for quick dictation",
+          defaultValue: isCopilotOptimizedParakeet(adaptiveProfile, rapidId)
+            ? "Lowest latency with the NPU path on this PC"
+            : "Lowest latency for quick dictation",
         }),
         modelId: rapidId,
       },

@@ -60,11 +60,17 @@ export const FeatureGateHint: React.FC<FeatureGateHintProps> = ({
         <div
           className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border ${style.icon}`}
         >
-          {tone === "premium" && !actionLabel ? <Lock className="h-4 w-4" /> : style.iconNode}
+          {tone === "premium" && !actionLabel ? (
+            <Lock className="h-4 w-4" />
+          ) : (
+            style.iconNode
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-medium text-white/90">{title}</p>
-          <p className="mt-1 text-[12px] leading-5 text-white/60">{description}</p>
+          <p className="mt-1 text-[12px] leading-5 text-white/60">
+            {description}
+          </p>
           {actionLabel && onAction ? (
             <div className="mt-3">
               <Button

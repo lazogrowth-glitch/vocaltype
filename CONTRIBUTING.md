@@ -283,7 +283,7 @@ cd src-tauri && cargo test && cargo clippy -- -D warnings && cd ..
 ```
 
 If you added user-visible text, add i18n keys to **all 17 locale files** under
-`src/i18n/locales/*/translation.json`.  Use `bun run check:translations` to
+`src/i18n/locales/*/translation.json`. Use `bun run check:translations` to
 verify completeness.
 
 ### Testing Your Changes

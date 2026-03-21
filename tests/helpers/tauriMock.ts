@@ -85,7 +85,10 @@ export async function injectTauriMock(
           }
         ).__TAURI_EVENT_PLUGIN_INTERNALS__ ?? {};
 
-      const registerCallback = (callback?: (payload: unknown) => void, once = false) => {
+      const registerCallback = (
+        callback?: (payload: unknown) => void,
+        once = false,
+      ) => {
         const id = nextCallbackId++;
         callbacks.set(id, (payload: unknown) => {
           if (once) {
@@ -159,7 +162,10 @@ export async function injectTauriMock(
             emitEvent(String(args?.event ?? ""), args?.payload);
             return null;
           case "plugin:event|unlisten":
-            unregisterListener(String(args?.event ?? ""), Number(args?.eventId ?? args?.id ?? 0));
+            unregisterListener(
+              String(args?.event ?? ""),
+              Number(args?.eventId ?? args?.id ?? 0),
+            );
             return null;
           case "plugin:store|load":
             return loadStore(String(args?.path ?? "mock.store.json"));

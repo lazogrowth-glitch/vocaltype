@@ -18,13 +18,13 @@ const Badge: React.FC<BadgeProps> = ({
   className = "",
 }) => {
   const variantClasses = {
-    primary: "border border-logo-primary/25 bg-logo-primary/15 text-logo-primary",
+    primary:
+      "border border-logo-primary/25 bg-logo-primary/15 text-logo-primary",
     success: "border border-emerald-400/20 bg-emerald-400/10 text-emerald-300",
     secondary: "border border-white/10 bg-white/[0.06] text-white/42",
     quality: "border border-white/10 bg-white/[0.06] text-white/42",
     speed: "border border-sky-400/18 bg-sky-400/10 text-sky-200",
-    experimental:
-      "bg-rose-400/15 text-rose-200 border border-rose-400/35",
+    experimental: "bg-rose-400/15 text-rose-200 border border-rose-400/35",
   };
 
   return (

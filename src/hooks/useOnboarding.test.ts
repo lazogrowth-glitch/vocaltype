@@ -46,7 +46,10 @@ beforeEach(() => {
 
 describe("useOnboarding", () => {
   it("sets onboardingStep to 'model' when no models available (non-dev, non-macOS)", async () => {
-    mockCommands.hasAnyModelsAvailable.mockResolvedValue({ status: "ok", data: false });
+    mockCommands.hasAnyModelsAvailable.mockResolvedValue({
+      status: "ok",
+      data: false,
+    });
 
     const { result } = renderHook(() =>
       useOnboarding({ authLoading: false, hasAnyAccess: true }),
@@ -58,7 +61,10 @@ describe("useOnboarding", () => {
   });
 
   it("sets onboardingStep to 'done' when models available and not macOS", async () => {
-    mockCommands.hasAnyModelsAvailable.mockResolvedValue({ status: "ok", data: true });
+    mockCommands.hasAnyModelsAvailable.mockResolvedValue({
+      status: "ok",
+      data: true,
+    });
 
     const { result } = renderHook(() =>
       useOnboarding({ authLoading: false, hasAnyAccess: true }),
@@ -73,7 +79,10 @@ describe("useOnboarding", () => {
     mockPlatform.mockReturnValue("macos");
     mockCheckA11y.mockResolvedValue(false);
     mockCheckMic.mockResolvedValue(true);
-    mockCommands.hasAnyModelsAvailable.mockResolvedValue({ status: "ok", data: true });
+    mockCommands.hasAnyModelsAvailable.mockResolvedValue({
+      status: "ok",
+      data: true,
+    });
 
     const { result } = renderHook(() =>
       useOnboarding({ authLoading: false, hasAnyAccess: true }),
@@ -85,7 +94,10 @@ describe("useOnboarding", () => {
   });
 
   it("handleAccessibilityComplete sets step to 'model' for new user", async () => {
-    mockCommands.hasAnyModelsAvailable.mockResolvedValue({ status: "ok", data: false });
+    mockCommands.hasAnyModelsAvailable.mockResolvedValue({
+      status: "ok",
+      data: false,
+    });
 
     const { result } = renderHook(() =>
       useOnboarding({ authLoading: false, hasAnyAccess: true }),
@@ -104,7 +116,10 @@ describe("useOnboarding", () => {
   });
 
   it("handleModelSelected sets onboardingStep to 'done'", async () => {
-    mockCommands.hasAnyModelsAvailable.mockResolvedValue({ status: "ok", data: false });
+    mockCommands.hasAnyModelsAvailable.mockResolvedValue({
+      status: "ok",
+      data: false,
+    });
 
     const { result } = renderHook(() =>
       useOnboarding({ authLoading: false, hasAnyAccess: true }),

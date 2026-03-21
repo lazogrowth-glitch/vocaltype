@@ -1,11 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import {
-  Rocket,
-  ShieldCheck,
-  Sparkles,
-  TimerReset,
-} from "lucide-react";
+import { Rocket, ShieldCheck, Sparkles, TimerReset } from "lucide-react";
 import type { ModelInfo } from "@/bindings";
 import { getTranslatedModelName } from "@/lib/utils/modelTranslation";
 
@@ -59,7 +54,8 @@ export const ProductModesGrid: React.FC<ProductModesGridProps> = ({
     <div className="space-y-2">
       {productModes.map(({ id, label, description, modelId, model }) => {
         const isActiveMode =
-          (adaptiveProfile?.active_runtime_model_id || currentModel) === modelId;
+          (adaptiveProfile?.active_runtime_model_id || currentModel) ===
+          modelId;
         const meta = PRODUCT_MODE_META[id as keyof typeof PRODUCT_MODE_META];
         const Icon = meta.icon;
         return (

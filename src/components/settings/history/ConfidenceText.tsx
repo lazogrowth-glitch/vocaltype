@@ -38,7 +38,10 @@ export const ConfidenceText: React.FC<ConfidenceTextProps> = ({
 
   const overall = percent(confidencePayload.overall_confidence);
 
-  if (!confidencePayload.mapping_stable || confidencePayload.words.length === 0) {
+  if (
+    !confidencePayload.mapping_stable ||
+    confidencePayload.words.length === 0
+  ) {
     return (
       <div className="space-y-1">
         <p className={className}>{text}</p>

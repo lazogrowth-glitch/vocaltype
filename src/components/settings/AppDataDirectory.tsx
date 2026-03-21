@@ -75,11 +75,20 @@ export const AppDataDirectory: React.FC<AppDataDirectoryProps> = ({
   return (
     <SettingContainer
       title={t("settings.about.appDataDirectory.title")}
-      description={appDirPath ? truncateMiddle(appDirPath) : t("settings.about.appDataDirectory.description")}
+      description={
+        appDirPath
+          ? truncateMiddle(appDirPath)
+          : t("settings.about.appDataDirectory.description")
+      }
       descriptionMode="inline"
       grouped={grouped}
     >
-      <Button onClick={handleOpen} variant="secondary" size="sm" disabled={!appDirPath}>
+      <Button
+        onClick={handleOpen}
+        variant="secondary"
+        size="sm"
+        disabled={!appDirPath}
+      >
         {t("common.open")}
       </Button>
     </SettingContainer>

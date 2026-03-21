@@ -99,7 +99,11 @@ export const SnippetsSettings: React.FC = () => {
     if (!trigger || !expansion) return;
 
     try {
-      const result = await commands.updateVoiceSnippet(edit.id, trigger, expansion);
+      const result = await commands.updateVoiceSnippet(
+        edit.id,
+        trigger,
+        expansion,
+      );
       if (result.status === "ok") {
         setEdit(null);
         await load();
@@ -145,7 +149,9 @@ export const SnippetsSettings: React.FC = () => {
             value={newTrigger}
             onChange={(e) => setNewTrigger(e.target.value)}
             onKeyDown={handleAddKeyDown}
-            placeholder={t("snippets.triggerPlaceholder", { defaultValue: "Déclencheur vocal (ex : mon email)" })}
+            placeholder={t("snippets.triggerPlaceholder", {
+              defaultValue: "Déclencheur vocal (ex : mon email)",
+            })}
             variant="compact"
             disabled={adding}
           />
@@ -154,7 +160,9 @@ export const SnippetsSettings: React.FC = () => {
             value={newExpansion}
             onChange={(e) => setNewExpansion(e.target.value)}
             onKeyDown={handleAddKeyDown}
-            placeholder={t("snippets.expansionPlaceholder", { defaultValue: "Texte à coller (ex : jean@exemple.com)" })}
+            placeholder={t("snippets.expansionPlaceholder", {
+              defaultValue: "Texte à coller (ex : jean@exemple.com)",
+            })}
             variant="compact"
             disabled={adding}
           />
@@ -174,7 +182,9 @@ export const SnippetsSettings: React.FC = () => {
       {/* List */}
       {snippets.length === 0 ? (
         <p className="px-1 text-[13px] italic text-white/35">
-          {t("snippets.empty", { defaultValue: "Aucun snippet. Ajoutes-en un ci-dessus." })}
+          {t("snippets.empty", {
+            defaultValue: "Aucun snippet. Ajoutes-en un ci-dessus.",
+          })}
         </p>
       ) : (
         <div className="divide-y divide-white/6 rounded-lg border border-white/8">
@@ -188,7 +198,10 @@ export const SnippetsSettings: React.FC = () => {
                       type="text"
                       value={edit.trigger}
                       onChange={(e) =>
-                        setEdit((prev) => prev && { ...prev, trigger: e.target.value })
+                        setEdit(
+                          (prev) =>
+                            prev && { ...prev, trigger: e.target.value },
+                        )
                       }
                       onKeyDown={handleEditKeyDown}
                       variant="compact"
@@ -198,7 +211,10 @@ export const SnippetsSettings: React.FC = () => {
                       type="text"
                       value={edit.expansion}
                       onChange={(e) =>
-                        setEdit((prev) => prev && { ...prev, expansion: e.target.value })
+                        setEdit(
+                          (prev) =>
+                            prev && { ...prev, expansion: e.target.value },
+                        )
                       }
                       onKeyDown={handleEditKeyDown}
                       variant="compact"
@@ -248,7 +264,9 @@ export const SnippetsSettings: React.FC = () => {
                         type="button"
                         onClick={() => handleRemove(s.id)}
                         className="rounded p-1 text-white/35 hover:text-red-400 hover:bg-white/8 transition-colors"
-                        title={t("snippets.remove", { defaultValue: "Supprimer" })}
+                        title={t("snippets.remove", {
+                          defaultValue: "Supprimer",
+                        })}
                       >
                         <Trash2 size={13} />
                       </button>

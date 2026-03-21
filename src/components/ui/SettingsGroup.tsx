@@ -15,7 +15,15 @@ export const SettingsGroup: React.FC<SettingsGroupProps> = ({
     <section>
       {title && (
         <div style={{ marginTop: 24, marginBottom: 12 }}>
-          <h2 style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: 1, color: "rgba(255,255,255,0.25)" }}>
+          <h2
+            style={{
+              fontSize: 10,
+              fontWeight: 600,
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              color: "rgba(255,255,255,0.25)",
+            }}
+          >
             {title}
           </h2>
           {description && (

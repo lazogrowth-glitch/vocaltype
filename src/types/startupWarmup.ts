@@ -1,8 +1,4 @@
-export type StartupWarmupPhase =
-  | "idle"
-  | "preparing"
-  | "ready"
-  | "failed";
+export type StartupWarmupPhase = "idle" | "preparing" | "ready" | "failed";
 
 export type StartupWarmupReason =
   | "no_model_selected"

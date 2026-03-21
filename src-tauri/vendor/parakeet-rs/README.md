@@ -1,4 +1,5 @@
 # parakeet-rs
+
 [![Rust](https://github.com/altunenes/parakeet-rs/actions/workflows/rust.yml/badge.svg)](https://github.com/altunenes/parakeet-rs/actions/workflows/rust.yml)
 [![crates.io](https://img.shields.io/crates/v/parakeet-rs.svg)](https://crates.io/crates/parakeet-rs)
 
@@ -8,6 +9,7 @@ Note: CoreML doesn't stable with this model - stick w/ CPU (or other GPU EP like
 ## Models
 
 **CTC (English-only)**: Fast & accurate
+
 ```rust
 use parakeet_rs::Parakeet;
 
@@ -25,6 +27,7 @@ for token in result.tokens {
 ```
 
 **TDT (Multilingual)**: 25 languages with auto-detection
+
 ```rust
 use parakeet_rs::ParakeetTDT;
 
@@ -42,6 +45,7 @@ for token in result.tokens {
 ```
 
 **EOU (Streaming)**: Real-time ASR with end-of-utterance detection
+
 ```rust
 use parakeet_rs::ParakeetEOU;
 
@@ -59,9 +63,11 @@ for chunk in audio.chunks(CHUNK_SIZE) {
 ```
 
 **Sortformer v2 & v2.1 (Speaker Diarization)**: Streaming 4-speaker diarization
+
 ```toml
 parakeet-rs = { version = "0.2", features = ["sortformer"] }
 ```
+
 ```rust
 use parakeet_rs::sortformer::{Sortformer, DiarizationConfig};
 
@@ -75,8 +81,8 @@ for seg in segments {
     println!("Speaker {} [{:.2}s - {:.2}s]", seg.speaker_id, seg.start, seg.end);
 }
 ```
-See `examples/diarization.rs` for combining with TDT transcription.
 
+See `examples/diarization.rs` for combining with TDT transcription.
 
 ## Setup
 
@@ -91,6 +97,7 @@ See `examples/diarization.rs` for combining with TDT transcription.
 Quantized versions available (int8). All files must be in the same directory.
 
 GPU support (auto-falls back to CPU if fails):
+
 ```toml
 parakeet-rs = { version = "0.1", features = ["cuda"] }  # or tensorrt, webgpu, directml, rocm
 ```
@@ -101,7 +108,6 @@ use parakeet_rs::{Parakeet, ExecutionConfig, ExecutionProvider};
 let config = ExecutionConfig::new().with_execution_provider(ExecutionProvider::Cuda);
 let mut parakeet = Parakeet::from_pretrained(".", Some(config))?;
 ```
-
 
 ## Features
 

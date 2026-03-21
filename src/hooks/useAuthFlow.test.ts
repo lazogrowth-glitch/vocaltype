@@ -39,11 +39,21 @@ vi.mock("sonner", () => ({
 import { authClient } from "@/lib/auth/client";
 import { licenseClient } from "@/lib/license/client";
 
-const mockAuthClient = authClient as unknown as Record<string, ReturnType<typeof vi.fn>>;
-const mockLicenseClient = licenseClient as unknown as Record<string, ReturnType<typeof vi.fn>>;
+const mockAuthClient = authClient as unknown as Record<
+  string,
+  ReturnType<typeof vi.fn>
+>;
+const mockLicenseClient = licenseClient as unknown as Record<
+  string,
+  ReturnType<typeof vi.fn>
+>;
 const t = (key: string) => key;
 
-const defaultRuntimeState = { state: "expired" as const, reason: null, integrity_anomalies: [] };
+const defaultRuntimeState = {
+  state: "expired" as const,
+  reason: null,
+  integrity_anomalies: [],
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -86,12 +96,18 @@ describe("useAuthFlow — refreshSession", () => {
     const fakeSession = {
       token: "tok123",
       user: { id: "u1", email: "a@b.com" },
-      subscription: { status: "active" as const, has_access: true, tier: "premium" as const },
+      subscription: {
+        status: "active" as const,
+        has_access: true,
+        tier: "premium" as const,
+      },
     };
     mockAuthClient.getStoredToken.mockReturnValue("tok123");
     mockAuthClient.hydrateStoredSession.mockResolvedValue(fakeSession);
     mockAuthClient.getSession.mockResolvedValue(fakeSession);
-    mockLicenseClient.getRuntimeState.mockResolvedValue({ state: "online_valid" });
+    mockLicenseClient.getRuntimeState.mockResolvedValue({
+      state: "online_valid",
+    });
 
     const { result } = renderHook(() => useAuthFlow(t));
     await waitFor(() => expect(result.current.authLoading).toBe(false));
@@ -118,12 +134,18 @@ describe("useAuthFlow — handleLogout", () => {
     const fakeSession = {
       token: "tok",
       user: { id: "u1", email: "a@b.com" },
-      subscription: { status: "active" as const, has_access: true, tier: "premium" as const },
+      subscription: {
+        status: "active" as const,
+        has_access: true,
+        tier: "premium" as const,
+      },
     };
     mockAuthClient.getStoredToken.mockReturnValue("tok");
     mockAuthClient.hydrateStoredSession.mockResolvedValue(fakeSession);
     mockAuthClient.getSession.mockResolvedValue(fakeSession);
-    mockLicenseClient.getRuntimeState.mockResolvedValue({ state: "online_valid" });
+    mockLicenseClient.getRuntimeState.mockResolvedValue({
+      state: "online_valid",
+    });
 
     const { result } = renderHook(() => useAuthFlow(t));
     await waitFor(() => expect(result.current.session).not.toBeNull());
@@ -153,7 +175,9 @@ describe("useAuthFlow — handleDismissTrialWelcome", () => {
 describe("useAuthFlow — handleLogin", () => {
   it("sets authSubmitting during login", async () => {
     let resolveLogin!: (v: unknown) => void;
-    const loginPromise = new Promise((res) => { resolveLogin = res; });
+    const loginPromise = new Promise((res) => {
+      resolveLogin = res;
+    });
     mockLicenseClient.issue.mockReturnValue(loginPromise);
     mockAuthClient.login = vi.fn().mockReturnValue(loginPromise);
 
@@ -173,7 +197,9 @@ describe("useAuthFlow — handleLogin", () => {
   });
 
   it("sets authError when login fails", async () => {
-    mockAuthClient.login = vi.fn().mockRejectedValue(new Error("Invalid credentials"));
+    mockAuthClient.login = vi
+      .fn()
+      .mockRejectedValue(new Error("Invalid credentials"));
 
     const { result } = renderHook(() => useAuthFlow(t));
     await waitFor(() => expect(result.current.authLoading).toBe(false));

@@ -1,9 +1,4 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { ask } from "@tauri-apps/plugin-dialog";
@@ -88,10 +83,14 @@ const ProcessingModelsSection: React.FC = () => {
 
   const savedModels = getSetting("saved_processing_models") || [];
   const providers = settings?.post_process_providers || [];
-  const selectedProvider = providers.find((provider) => provider.id === selectedProviderId);
-  const isAppleIntelligenceProvider = selectedProviderId === "apple_intelligence";
+  const selectedProvider = providers.find(
+    (provider) => provider.id === selectedProviderId,
+  );
+  const isAppleIntelligenceProvider =
+    selectedProviderId === "apple_intelligence";
   const isGeminiProvider = selectedProviderId === "gemini";
-  const providerRequiresApiKey = !!selectedProviderId && !isAppleIntelligenceProvider;
+  const providerRequiresApiKey =
+    !!selectedProviderId && !isAppleIntelligenceProvider;
 
   const providerOptions = useMemo(
     () => providers.map((p) => ({ value: p.id, label: p.label })),
@@ -262,15 +261,24 @@ const ProcessingModelsSection: React.FC = () => {
             <>
               {isAppleIntelligenceProvider ? (
                 <FeatureGateHint
-                  tone={appleIntelligenceAvailable === false ? "warning" : "info"}
-                  title={t("settings.postProcessing.api.appleIntelligence.title")}
+                  tone={
+                    appleIntelligenceAvailable === false ? "warning" : "info"
+                  }
+                  title={t(
+                    "settings.postProcessing.api.appleIntelligence.title",
+                  )}
                   description={
                     appleIntelligenceAvailable === false
-                      ? t("settings.postProcessing.api.appleIntelligence.unavailable")
-                      : t("settings.postProcessing.api.appleIntelligence.description", {
-                          defaultValue:
-                            "Runs fully on-device. No API key or network access is required.",
-                        })
+                      ? t(
+                          "settings.postProcessing.api.appleIntelligence.unavailable",
+                        )
+                      : t(
+                          "settings.postProcessing.api.appleIntelligence.description",
+                          {
+                            defaultValue:
+                              "Runs fully on-device. No API key or network access is required.",
+                          },
+                        )
                   }
                 />
               ) : null}
@@ -341,7 +349,9 @@ const ProcessingModelsSection: React.FC = () => {
                       disabled={isFetching || !apiKey.trim()}
                       className="flex items-center justify-center h-8 w-8 rounded-md bg-mid-gray/10 hover:bg-mid-gray/20 transition-colors disabled:opacity-40"
                       title={t("settings.models.processingModels.fetchModels")}
-                      aria-label={t("settings.models.processingModels.fetchModels")}
+                      aria-label={t(
+                        "settings.models.processingModels.fetchModels",
+                      )}
                     >
                       <RefreshCcw
                         className={`w-3.5 h-3.5 ${isFetching ? "animate-spin" : ""}`}
@@ -352,10 +362,13 @@ const ProcessingModelsSection: React.FC = () => {
                 {selectedProvider ? (
                   <p className="text-[11px] leading-5 text-white/45">
                     {isAppleIntelligenceProvider
-                      ? t("settings.postProcessing.api.appleIntelligence.requirements", {
-                          defaultValue:
-                            "Requires an Apple Silicon Mac running macOS Tahoe (26.0) or later with Apple Intelligence enabled in System Settings.",
-                        })
+                      ? t(
+                          "settings.postProcessing.api.appleIntelligence.requirements",
+                          {
+                            defaultValue:
+                              "Requires an Apple Silicon Mac running macOS Tahoe (26.0) or later with Apple Intelligence enabled in System Settings.",
+                          },
+                        )
                       : t("settings.models.processingModels.providerHelp", {
                           defaultValue:
                             "The saved label will use {{provider}} and the selected model name.",
@@ -398,7 +411,6 @@ const ProcessingModelsSection: React.FC = () => {
 
 type ModelsTab = "transcription" | "processing";
 
-
 interface AdaptiveProfileSnapshot {
   machine_tier: "low" | "medium" | "high";
   recommended_model_id: string;
@@ -432,7 +444,9 @@ export const ModelsSettings: React.FC = () => {
   const [languageFilter, setLanguageFilter] = useState("all");
   const [showGeminiKeyDialog, setShowGeminiKeyDialog] = useState(false);
   const [geminiKeyInput, setGeminiKeyInput] = useState("");
-  const [cancellingModelId, setCancellingModelId] = useState<string | null>(null);
+  const [cancellingModelId, setCancellingModelId] = useState<string | null>(
+    null,
+  );
   const [adaptiveProfile, setAdaptiveProfile] =
     useState<AdaptiveProfileSnapshot | null>(null);
   const { getSetting, updateSetting } = useSettings();
@@ -455,7 +469,6 @@ export const ModelsSettings: React.FC = () => {
       .then((profile) => setAdaptiveProfile(profile))
       .catch(() => setAdaptiveProfile(null));
   }, []);
-
 
   const geminiApiKey = getSetting("gemini_api_key") as string | undefined;
   const hasGeminiKey = !!geminiApiKey && geminiApiKey.length > 0;
@@ -643,10 +656,9 @@ export const ModelsSettings: React.FC = () => {
         id: "fast",
         label: t("settings.models.modes.fast", { defaultValue: "Rapide" }),
         description: t("settings.models.modes.fastDescription", {
-          defaultValue:
-            isCopilotOptimizedParakeet(adaptiveProfile, rapidId)
-              ? "Latence minimale avec le chemin NPU sur ce PC"
-              : "Latence minimale pour la dictée courte",
+          defaultValue: isCopilotOptimizedParakeet(adaptiveProfile, rapidId)
+            ? "Latence minimale avec le chemin NPU sur ce PC"
+            : "Latence minimale pour la dictée courte",
         }),
         modelId: rapidId,
       },
@@ -702,7 +714,8 @@ export const ModelsSettings: React.FC = () => {
         ))}
       </div>
 
-      {(adaptiveProfile?.copilot_plus_detected || adaptiveProfile?.npu_detected) && (
+      {(adaptiveProfile?.copilot_plus_detected ||
+        adaptiveProfile?.npu_detected) && (
         <div className="rounded-[10px] border border-white/8 bg-white/[0.03] px-4 py-3">
           <p className="text-[13px] font-medium text-white/85">
             {adaptiveProfile?.copilot_plus_detected

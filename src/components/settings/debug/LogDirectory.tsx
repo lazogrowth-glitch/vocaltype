@@ -58,7 +58,11 @@ export const LogDirectory: React.FC<LogDirectoryProps> = ({
   return (
     <SettingContainer
       title={t("settings.debug.logDirectory.title")}
-      description={logDir ? truncateMiddle(logDir) : t("settings.debug.logDirectory.description")}
+      description={
+        logDir
+          ? truncateMiddle(logDir)
+          : t("settings.debug.logDirectory.description")
+      }
       descriptionMode="inline"
       grouped={grouped}
     >

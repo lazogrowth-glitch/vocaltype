@@ -46,7 +46,11 @@ export const TrialWelcomeModal: React.FC<TrialWelcomeModalProps> = ({
               className="flex items-center gap-3 text-[13px] text-white/75"
             >
               <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-logo-primary/15">
-                <Check size={10} className="text-logo-primary" strokeWidth={2.5} />
+                <Check
+                  size={10}
+                  className="text-logo-primary"
+                  strokeWidth={2.5}
+                />
               </span>
               {t(key)}
             </li>

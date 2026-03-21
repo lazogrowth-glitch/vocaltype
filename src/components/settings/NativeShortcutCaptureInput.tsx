@@ -122,9 +122,9 @@ export const NativeShortcutCaptureInput: React.FC<
               unlistenRef.current();
               unlistenRef.current = null;
             }
-            await commands.stopNativeShortcutCaptureRecording().catch(
-              console.error,
-            );
+            await commands
+              .stopNativeShortcutCaptureRecording()
+              .catch(console.error);
             setIsRecording(false);
             setCurrentKeys("");
             currentKeysRef.current = "";

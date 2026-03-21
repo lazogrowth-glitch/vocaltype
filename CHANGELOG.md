@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Added
+
 - **RecordingModeSelector** — unified 3-way recording mode picker (Toggle / Push-to-Talk / Always-On) replacing the two separate toggles.
 - **`RecordingMode` enum** in Rust settings with `from_legacy()` migration helper.
 - **`AppError` / `AppResult`** — centralised `thiserror`-derived domain error type with log-level conventions documented in `error.rs`.
@@ -15,6 +16,7 @@
 - `lib/subscription/` — renamed from `lib/plan/` for clarity.
 
 ### Changed
+
 - Rust source tree reorganised into sub-crates: `processing/`, `security/`, `llm/`, `runtime/`, `platform/`.
 - `useAuthFlow` slimmed down: periodic refresh logic moved to `useSessionRefresh`.
 - `PushToTalk.tsx` and `AlwaysOnMicrophone.tsx` replaced by `RecordingModeSelector.tsx`.

@@ -28,8 +28,12 @@ const StatCard: React.FC<{
   sub?: string;
 }> = ({ label, value, sub }) => (
   <div className="flex flex-col gap-1 rounded-[10px] border border-white/8 bg-white/[0.03] px-4 py-3">
-    <p className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-white/30">{label}</p>
-    <p className="text-[22px] font-semibold leading-none text-white/90">{value}</p>
+    <p className="text-[10.5px] font-medium uppercase tracking-[0.1em] text-white/30">
+      {label}
+    </p>
+    <p className="text-[22px] font-semibold leading-none text-white/90">
+      {value}
+    </p>
     {sub && <p className="text-[11px] text-white/35">{sub}</p>}
   </div>
 );
@@ -73,7 +77,9 @@ export const StatsSettings: React.FC = () => {
           className="text-white/30 hover:text-white/60 transition-colors"
           title={t("stats.refresh", { defaultValue: "Actualiser" })}
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+          <RefreshCw
+            className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`}
+          />
         </button>
       </div>
 
@@ -94,18 +100,24 @@ export const StatsSettings: React.FC = () => {
               })}
             />
             <StatCard
-              label={t("stats.totalEntries", { defaultValue: "Transcriptions" })}
+              label={t("stats.totalEntries", {
+                defaultValue: "Transcriptions",
+              })}
               value={formatNumber(stats.total_entries)}
             />
             <StatCard
               label={t("stats.today", { defaultValue: "Aujourd'hui" })}
               value={formatNumber(stats.entries_today)}
-              sub={t("stats.transcriptions", { defaultValue: "transcriptions" })}
+              sub={t("stats.transcriptions", {
+                defaultValue: "transcriptions",
+              })}
             />
             <StatCard
               label={t("stats.thisWeek", { defaultValue: "Cette semaine" })}
               value={formatNumber(stats.entries_this_week)}
-              sub={t("stats.transcriptions", { defaultValue: "transcriptions" })}
+              sub={t("stats.transcriptions", {
+                defaultValue: "transcriptions",
+              })}
             />
           </div>
 
@@ -113,7 +125,9 @@ export const StatsSettings: React.FC = () => {
           {stats.most_used_model && (
             <div className="rounded-[10px] border border-white/8 bg-white/[0.03] px-4 py-3">
               <p className="mb-1 text-[10.5px] font-medium uppercase tracking-[0.1em] text-white/30">
-                {t("stats.mostUsedModel", { defaultValue: "Modèle le plus utilisé" })}
+                {t("stats.mostUsedModel", {
+                  defaultValue: "Modèle le plus utilisé",
+                })}
               </p>
               <p className="text-[15px] font-medium text-logo-primary">
                 {stats.most_used_model}
@@ -125,7 +139,9 @@ export const StatsSettings: React.FC = () => {
           {stats.total_entries > 0 && (
             <div className="rounded-[10px] border border-white/8 bg-white/[0.03] px-4 py-3">
               <p className="mb-1 text-[10.5px] font-medium uppercase tracking-[0.1em] text-white/30">
-                {t("stats.avgWords", { defaultValue: "Mots par transcription (moy.)" })}
+                {t("stats.avgWords", {
+                  defaultValue: "Mots par transcription (moy.)",
+                })}
               </p>
               <p className="text-[22px] font-semibold text-white/90">
                 {Math.round(stats.total_words / stats.total_entries)}

@@ -19,7 +19,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error("[ErrorBoundary] Uncaught React error:", error, info.componentStack);
+    console.error(
+      "[ErrorBoundary] Uncaught React error:",
+      error,
+      info.componentStack,
+    );
   }
 
   render() {
@@ -42,7 +46,11 @@ export class ErrorBoundary extends React.Component<Props, State> {
           }}
         >
           <span style={{ fontSize: "18px" }}>⚠</span>
-          <span>{i18n.t("error.boundary.sectionMessage", { defaultValue: "Une erreur est survenue dans cette section." })}</span>
+          <span>
+            {i18n.t("error.boundary.sectionMessage", {
+              defaultValue: "Une erreur est survenue dans cette section.",
+            })}
+          </span>
           {this.state.error && (
             <span style={{ color: "#888", fontSize: "11px" }}>
               {this.state.error.message}

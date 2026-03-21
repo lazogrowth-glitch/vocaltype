@@ -4,7 +4,9 @@ import { commands } from "@/bindings";
 import type { StartupWarmupStatusSnapshot } from "@/types/startupWarmup";
 
 export function useStartupWarmupStatus() {
-  const [status, setStatus] = useState<StartupWarmupStatusSnapshot | null>(null);
+  const [status, setStatus] = useState<StartupWarmupStatusSnapshot | null>(
+    null,
+  );
 
   useEffect(() => {
     let active = true;

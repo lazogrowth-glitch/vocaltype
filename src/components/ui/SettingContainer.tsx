@@ -40,15 +40,12 @@ export const SettingContainer: React.FC<SettingContainerProps> = ({
     if (!showTooltip) return;
 
     document.addEventListener("mousedown", handleClickOutside);
-    return () =>
-      document.removeEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showTooltip]);
 
   // Row style: flex items-center justify-between py-[13px] border-b border-white/5
   // When grouped (inside a SettingsGroup which handles dividers), use simpler row
-  const rowClasses = grouped
-    ? ""
-    : "border-b border-white/5 last:border-b-0";
+  const rowClasses = grouped ? "" : "border-b border-white/5 last:border-b-0";
 
   const infoButton = (
     <div
@@ -103,7 +100,16 @@ export const SettingContainer: React.FC<SettingContainerProps> = ({
   return (
     <div
       className={`group ${rowClasses}`}
-      style={{ display: "flex", width: "100%", alignItems: "center", justifyContent: "space-between", gap: 16, minHeight: 48, padding: "13px 0", borderBottom: "0.5px solid rgba(255,255,255,0.05)" }}
+      style={{
+        display: "flex",
+        width: "100%",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 16,
+        minHeight: 48,
+        padding: "13px 0",
+        borderBottom: "0.5px solid rgba(255,255,255,0.05)",
+      }}
     >
       <div className="min-w-0">
         {descriptionMode === "tooltip" ? (
@@ -133,9 +139,7 @@ export const SettingContainer: React.FC<SettingContainerProps> = ({
           </div>
         )}
       </div>
-      <div className="relative shrink-0">
-        {children}
-      </div>
+      <div className="relative shrink-0">{children}</div>
     </div>
   );
 };

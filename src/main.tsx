@@ -31,7 +31,10 @@ const notifyDesktopUiReady = async () => {
   try {
     await emit("desktop-ui-ready");
   } catch (error) {
-    console.warn("Failed to notify desktop runtime that the UI is ready:", error);
+    console.warn(
+      "Failed to notify desktop runtime that the UI is ready:",
+      error,
+    );
   }
 };
 

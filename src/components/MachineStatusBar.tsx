@@ -16,20 +16,13 @@ const MODEL_LABELS: Record<string, string> = {
 };
 
 const MODE_STYLES: Record<MachineStatusMode, string> = {
-  optimal:
-    "border-emerald-400/25 bg-[rgba(20,80,40,0.4)] text-white/60",
-  battery:
-    "border-amber-400/12 bg-amber-400/[0.06] text-amber-100",
-  saver:
-    "border-amber-400/12 bg-amber-400/[0.06] text-amber-100",
-  thermal:
-    "border-rose-400/12 bg-rose-400/[0.06] text-rose-100",
-  memory_limited:
-    "border-orange-400/12 bg-orange-400/[0.06] text-orange-100",
-  fallback:
-    "border-sky-400/12 bg-sky-400/[0.06] text-sky-100",
-  calibrating:
-    "border-violet-400/12 bg-violet-400/[0.06] text-violet-100",
+  optimal: "border-emerald-400/25 bg-[rgba(20,80,40,0.4)] text-white/60",
+  battery: "border-amber-400/12 bg-amber-400/[0.06] text-amber-100",
+  saver: "border-amber-400/12 bg-amber-400/[0.06] text-amber-100",
+  thermal: "border-rose-400/12 bg-rose-400/[0.06] text-rose-100",
+  memory_limited: "border-orange-400/12 bg-orange-400/[0.06] text-orange-100",
+  fallback: "border-sky-400/12 bg-sky-400/[0.06] text-sky-100",
+  calibrating: "border-violet-400/12 bg-violet-400/[0.06] text-violet-100",
 };
 
 async function fetchDiagnostics(): Promise<RuntimeDiagnosticsSnapshot | null> {
@@ -65,11 +58,23 @@ export const MachineStatusBar: React.FC<{ variant?: "banner" | "sidebar" }> = ({
     let cleanupAdaptive: (() => void) | undefined;
     let cleanupLifecycle: (() => void) | undefined;
 
-    listen("adaptive-profile-updated", () => { void refresh(); }).then((fn) => {
-      if (!active) { fn(); } else { cleanupAdaptive = fn; }
+    listen("adaptive-profile-updated", () => {
+      void refresh();
+    }).then((fn) => {
+      if (!active) {
+        fn();
+      } else {
+        cleanupAdaptive = fn;
+      }
     });
-    listen("transcription-lifecycle", () => { void refresh(); }).then((fn) => {
-      if (!active) { fn(); } else { cleanupLifecycle = fn; }
+    listen("transcription-lifecycle", () => {
+      void refresh();
+    }).then((fn) => {
+      if (!active) {
+        fn();
+      } else {
+        cleanupLifecycle = fn;
+      }
     });
 
     return () => {

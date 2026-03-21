@@ -11,7 +11,10 @@ interface UseBackendEventsProps {
   currentSection: SidebarSection;
   setCurrentSection: (section: SidebarSection) => void;
   settings: AppSettings | null | undefined;
-  updateSetting: <K extends keyof AppSettings>(key: K, value: AppSettings[K]) => void;
+  updateSetting: <K extends keyof AppSettings>(
+    key: K,
+    value: AppSettings[K],
+  ) => void;
 }
 
 export function useBackendEvents({
@@ -22,7 +25,9 @@ export function useBackendEvents({
   updateSetting,
 }: UseBackendEventsProps) {
   const lastRuntimeErrorRef = useRef<{ key: string; at: number } | null>(null);
-  const commandModeCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const commandModeCountdownRef = useRef<ReturnType<typeof setInterval> | null>(
+    null,
+  );
 
   const clearCommandModeCountdown = useCallback(() => {
     if (commandModeCountdownRef.current !== null) {
@@ -166,7 +171,10 @@ export function useBackendEvents({
         clearCommandModeCountdown();
 
         toast.loading(
-          t("commandMode.recording", { count: remaining, defaultValue: `Parle maintenant… (${remaining}s)` }),
+          t("commandMode.recording", {
+            count: remaining,
+            defaultValue: `Parle maintenant… (${remaining}s)`,
+          }),
           { id: "command-mode", duration: Infinity },
         );
 
@@ -174,7 +182,10 @@ export function useBackendEvents({
           remaining -= 1;
           if (remaining > 0) {
             toast.loading(
-              t("commandMode.recording", { count: remaining, defaultValue: `Parle maintenant… (${remaining}s)` }),
+              t("commandMode.recording", {
+                count: remaining,
+                defaultValue: `Parle maintenant… (${remaining}s)`,
+              }),
               { id: "command-mode", duration: Infinity },
             );
           } else {
@@ -215,14 +226,19 @@ export function useBackendEvents({
 
   // command-mode-error → show error toast
   useEffect(() => {
-    const unlisten = listen<{ message: string }>("command-mode-error", (event) => {
-      clearCommandModeCountdown();
-      toast.dismiss("command-mode");
-      toast.error(
-        t("commandMode.errorTitle", { defaultValue: "Command Mode — erreur" }),
-        { duration: 6000, description: event.payload?.message },
-      );
-    });
+    const unlisten = listen<{ message: string }>(
+      "command-mode-error",
+      (event) => {
+        clearCommandModeCountdown();
+        toast.dismiss("command-mode");
+        toast.error(
+          t("commandMode.errorTitle", {
+            defaultValue: "Command Mode — erreur",
+          }),
+          { duration: 6000, description: event.payload?.message },
+        );
+      },
+    );
     return () => {
       unlisten.then((fn) => fn());
     };
@@ -233,9 +249,14 @@ export function useBackendEvents({
     const unlisten = listen<boolean>("whisper-mode-changed", (event) => {
       const enabled = event.payload;
       if (enabled) {
-        toast.success(t("whisperMode.enabled", { defaultValue: "Whisper Mode on" }), { duration: 2500 });
+        toast.success(
+          t("whisperMode.enabled", { defaultValue: "Whisper Mode on" }),
+          { duration: 2500 },
+        );
       } else {
-        toast(t("whisperMode.disabled", { defaultValue: "Whisper Mode off" }), { duration: 2500 });
+        toast(t("whisperMode.disabled", { defaultValue: "Whisper Mode off" }), {
+          duration: 2500,
+        });
       }
     });
     return () => {
@@ -246,10 +267,13 @@ export function useBackendEvents({
   // whisper-mode-error
   useEffect(() => {
     const unlisten = listen<string>("whisper-mode-error", (event) => {
-      toast.error(t("whisperMode.errorTitle", { defaultValue: "Whisper Mode — error" }), {
-        duration: 6000,
-        description: event.payload,
-      });
+      toast.error(
+        t("whisperMode.errorTitle", { defaultValue: "Whisper Mode — error" }),
+        {
+          duration: 6000,
+          description: event.payload,
+        },
+      );
     });
     return () => {
       unlisten.then((fn) => fn());

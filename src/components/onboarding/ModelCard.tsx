@@ -1,12 +1,6 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
-import {
-  AlertTriangle,
-  Check,
-  Globe,
-  Loader2,
-  Trash2,
-} from "lucide-react";
+import { AlertTriangle, Check, Globe, Loader2, Trash2 } from "lucide-react";
 import type { ModelInfo } from "@/bindings";
 import { formatModelSize } from "../../lib/utils/format";
 import {
@@ -277,7 +271,9 @@ const ModelCard: React.FC<ModelCardProps> = ({
           )}
           <div className="mt-[3px] flex flex-wrap items-center gap-3 text-[11px] text-white/28">
             {model.supported_languages.length > 0 && (
-              <span>{getLanguageDisplayText(model.supported_languages, t)}</span>
+              <span>
+                {getLanguageDisplayText(model.supported_languages, t)}
+              </span>
             )}
             {status === "downloadable" && (
               <span>{formatModelSize(Number(model.size_mb))}</span>

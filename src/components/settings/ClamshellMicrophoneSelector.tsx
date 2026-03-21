@@ -62,10 +62,13 @@ export const ClamshellMicrophoneSelector: React.FC<ClamshellMicrophoneSelectorPr
       await resetSetting("clamshell_microphone_index");
     };
 
-    const nameCounts = audioDevices.reduce<Record<string, number>>((acc, device) => {
-      acc[device.name] = (acc[device.name] ?? 0) + 1;
-      return acc;
-    }, {});
+    const nameCounts = audioDevices.reduce<Record<string, number>>(
+      (acc, device) => {
+        acc[device.name] = (acc[device.name] ?? 0) + 1;
+        return acc;
+      },
+      {},
+    );
 
     const microphoneOptions = audioDevices.map((device) => ({
       value: device.index,

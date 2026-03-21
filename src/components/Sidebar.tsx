@@ -22,29 +22,45 @@ import { GeneralSettings } from "./settings/general/GeneralSettings";
 
 // All other panels are lazily loaded; they are only rendered when the user
 // navigates to them, reducing the initial JS parse/eval cost.
-const AdvancedSettings = React.lazy(
-  () => import("./settings/advanced/AdvancedSettings").then(m => ({ default: m.AdvancedSettings })),
+const AdvancedSettings = React.lazy(() =>
+  import("./settings/advanced/AdvancedSettings").then((m) => ({
+    default: m.AdvancedSettings,
+  })),
 );
-const HistorySettings = React.lazy(
-  () => import("./settings/history/HistorySettings").then(m => ({ default: m.HistorySettings })),
+const HistorySettings = React.lazy(() =>
+  import("./settings/history/HistorySettings").then((m) => ({
+    default: m.HistorySettings,
+  })),
 );
-const DebugSettings = React.lazy(
-  () => import("./settings/debug/DebugSettings").then(m => ({ default: m.DebugSettings })),
+const DebugSettings = React.lazy(() =>
+  import("./settings/debug/DebugSettings").then((m) => ({
+    default: m.DebugSettings,
+  })),
 );
-const AboutSettings = React.lazy(
-  () => import("./settings/about/AboutSettings").then(m => ({ default: m.AboutSettings })),
+const AboutSettings = React.lazy(() =>
+  import("./settings/about/AboutSettings").then((m) => ({
+    default: m.AboutSettings,
+  })),
 );
-const PostProcessingSettings = React.lazy(
-  () => import("./settings/post-processing/PostProcessingSettings").then(m => ({ default: m.PostProcessingSettings })),
+const PostProcessingSettings = React.lazy(() =>
+  import("./settings/post-processing/PostProcessingSettings").then((m) => ({
+    default: m.PostProcessingSettings,
+  })),
 );
-const ModelsSettings = React.lazy(
-  () => import("./settings/models/ModelsSettings").then(m => ({ default: m.ModelsSettings })),
+const ModelsSettings = React.lazy(() =>
+  import("./settings/models/ModelsSettings").then((m) => ({
+    default: m.ModelsSettings,
+  })),
 );
-const SnippetsSettings = React.lazy(
-  () => import("./settings/snippets/SnippetsSettings").then(m => ({ default: m.SnippetsSettings })),
+const SnippetsSettings = React.lazy(() =>
+  import("./settings/snippets/SnippetsSettings").then((m) => ({
+    default: m.SnippetsSettings,
+  })),
 );
-const StatsSettings = React.lazy(
-  () => import("./settings/stats/StatsSettings").then(m => ({ default: m.StatsSettings })),
+const StatsSettings = React.lazy(() =>
+  import("./settings/stats/StatsSettings").then((m) => ({
+    default: m.StatsSettings,
+  })),
 );
 
 export type SidebarSection = keyof typeof SECTIONS_CONFIG;
@@ -155,7 +171,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
   );
 
   return (
-    <aside style={{ width: 210, flexShrink: 0, height: "100%", overflow: "hidden", background: "#141414", borderRight: "0.5px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column" }}>
+    <aside
+      style={{
+        width: 210,
+        flexShrink: 0,
+        height: "100%",
+        overflow: "hidden",
+        background: "#141414",
+        borderRight: "0.5px solid rgba(255,255,255,0.08)",
+        display: "flex",
+        flexDirection: "column",
+      }}
+    >
       <div className="border-b border-white/6 px-[18px] pb-4 pt-5">
         <div className="min-w-0">
           <VocalTypeLogo width={104} />
@@ -199,7 +226,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               })}
             {trialBadge.urgency === "urgent" &&
               (trialBadge.days === 0
-                ? t("trial.badge.today", { defaultValue: "⚠ Expire aujourd'hui" })
+                ? t("trial.badge.today", {
+                    defaultValue: "⚠ Expire aujourd'hui",
+                  })
                 : t("trial.badge.urgent", {
                     count: trialBadge.days,
                     defaultValue: `⚠ Expire dans {{count}} jours`,
@@ -223,10 +252,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
               key={section.id}
               type="button"
               style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "10px 18px", fontSize: 13, width: "100%",
-                cursor: "pointer", transition: "all 0.15s",
-                borderRight: isActive ? "2px solid #c9a84c" : "2px solid transparent",
+                display: "flex",
+                alignItems: "center",
+                gap: 10,
+                padding: "10px 18px",
+                fontSize: 13,
+                width: "100%",
+                cursor: "pointer",
+                transition: "all 0.15s",
+                borderRight: isActive
+                  ? "2px solid #c9a84c"
+                  : "2px solid transparent",
                 background: isActive ? "rgba(201,168,76,0.12)" : "transparent",
                 color: isActive ? "#fff" : "rgba(255,255,255,0.45)",
               }}
@@ -237,9 +273,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <span
                 className={`flex h-4 w-4 shrink-0 items-center justify-center transition-colors ${
-                  isActive
-                    ? "text-white"
-                    : "text-current"
+                  isActive ? "text-white" : "text-current"
                 }`}
               >
                 <Icon

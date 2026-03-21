@@ -217,7 +217,11 @@ const PostProcessingActionsComponent: React.FC = () => {
                   {t("settings.postProcessing.actions.createFirst")}
                 </p>
               </div>
-              <Button onClick={handleStartCreate} variant="primary-soft" size="md">
+              <Button
+                onClick={handleStartCreate}
+                variant="primary-soft"
+                size="md"
+              >
                 {t("settings.postProcessing.actions.addAction")}
               </Button>
             </div>
