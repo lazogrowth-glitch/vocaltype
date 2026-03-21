@@ -854,6 +854,14 @@ async getHistoryEntries() : Promise<Result<HistoryEntry[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getHistoryEntriesPaginated(limit: number, offset: number) : Promise<Result<[HistoryEntry[], boolean], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_history_entries_paginated", { limit, offset }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async toggleHistoryEntrySaved(id: number) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("toggle_history_entry_saved", { id }) };
@@ -921,6 +929,14 @@ async exportHistoryEntries(format: string) : Promise<Result<string, string>> {
 async transcribeAudioFile(path: string) : Promise<Result<string, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("transcribe_audio_file", { path }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async clearAllHistory() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("clear_all_history") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -1206,7 +1222,19 @@ export type AppContextOverride = {
  * Same key format as `AppTranscriptionContext::process_name`.
  */
 process_name: string; category: AppContextCategory }
-export type AppSettings = { bindings: Partial<{ [key in string]: ShortcutBinding }>; push_to_talk: boolean; audio_feedback: boolean; audio_feedback_volume?: number; sound_theme?: SoundTheme; start_hidden?: boolean; autostart_enabled?: boolean; update_checks_enabled?: boolean; selected_model?: string; always_on_microphone?: boolean; selected_microphone?: string | null; selected_microphone_index?: string | null; clamshell_microphone?: string | null; clamshell_microphone_index?: string | null; selected_output_device?: string | null; translate_to_english?: boolean; selected_language?: string; overlay_position?: OverlayPosition; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; adaptive_vocabulary_enabled?: boolean; adaptive_voice_profile_enabled?: boolean; model_unload_timeout?: ModelUnloadTimeout; word_correction_threshold?: number; history_limit?: number; recording_retention_period?: RecordingRetentionPeriod; paste_method?: PasteMethod; clipboard_handling?: ClipboardHandling; auto_submit?: boolean; auto_submit_key?: AutoSubmitKey; post_process_enabled?: boolean; post_process_provider_id?: string; post_process_providers?: PostProcessProvider[]; post_process_api_keys?: Partial<{ [key in string]: string }>; post_process_models?: Partial<{ [key in string]: string }>; post_process_prompts?: LLMPrompt[]; post_process_selected_prompt_id?: string | null; mute_while_recording?: boolean; append_trailing_space?: boolean; app_language?: string; experimental_enabled?: boolean; keyboard_implementation?: KeyboardImplementation; show_tray_icon?: boolean; paste_delay_ms?: number; typing_tool?: TypingTool; external_script_path: string | null; long_audio_model?: string | null; long_audio_threshold_seconds?: number; gemini_api_key?: string | null; gemini_model?: string; post_process_actions?: PostProcessAction[]; saved_processing_models?: SavedProcessingModel[]; adaptive_profile_applied?: boolean; adaptive_machine_profile?: AdaptiveMachineProfile | null; 
+export type AppSettings = { 
+/**
+ * Schema version used to drive forward migrations.
+ * Never set this manually — it is managed by `migrate_settings`.
+ */
+settings_version?: number; bindings: Partial<{ [key in string]: ShortcutBinding }>; push_to_talk: boolean; audio_feedback: boolean; audio_feedback_volume?: number; sound_theme?: SoundTheme; start_hidden?: boolean; autostart_enabled?: boolean; update_checks_enabled?: boolean; selected_model?: string; always_on_microphone?: boolean; 
+/**
+ * Canonical recording mode — supersedes the `push_to_talk` and
+ * `always_on_microphone` boolean pair. Populated from those booleans
+ * on first load via settings migration (T11). New code should read this
+ * field; old code continues to use the booleans until migration is done.
+ */
+recording_mode?: RecordingMode; selected_microphone?: string | null; selected_microphone_index?: string | null; clamshell_microphone?: string | null; clamshell_microphone_index?: string | null; selected_output_device?: string | null; translate_to_english?: boolean; selected_language?: string; overlay_position?: OverlayPosition; debug_mode?: boolean; log_level?: LogLevel; custom_words?: string[]; adaptive_vocabulary_enabled?: boolean; adaptive_voice_profile_enabled?: boolean; model_unload_timeout?: ModelUnloadTimeout; word_correction_threshold?: number; history_limit?: number; recording_retention_period?: RecordingRetentionPeriod; paste_method?: PasteMethod; clipboard_handling?: ClipboardHandling; auto_submit?: boolean; auto_submit_key?: AutoSubmitKey; post_process_enabled?: boolean; post_process_provider_id?: string; post_process_providers?: PostProcessProvider[]; post_process_api_keys?: Partial<{ [key in string]: string }>; post_process_models?: Partial<{ [key in string]: string }>; post_process_prompts?: LLMPrompt[]; post_process_selected_prompt_id?: string | null; mute_while_recording?: boolean; append_trailing_space?: boolean; app_language?: string; experimental_enabled?: boolean; keyboard_implementation?: KeyboardImplementation; show_tray_icon?: boolean; paste_delay_ms?: number; typing_tool?: TypingTool; external_script_path: string | null; long_audio_model?: string | null; long_audio_threshold_seconds?: number; gemini_api_key?: string | null; gemini_model?: string; post_process_actions?: PostProcessAction[]; saved_processing_models?: SavedProcessingModel[]; adaptive_profile_applied?: boolean; adaptive_machine_profile?: AdaptiveMachineProfile | null; 
 /**
  * Whether the automatic app-context feature is enabled globally.
  */
@@ -1276,7 +1304,37 @@ export type PowerMode = "normal" | "saver" | "unknown"
  * Entry in the "recently detected apps" list (last N dictation sessions).
  */
 export type RecentAppEntry = { process_name: string; window_title: string | null; category: AppContextCategory; detected_at_ms: number }
-export type RecordingRetentionPeriod = "never" | "preserve_limit" | "days_3" | "weeks_2" | "months_3"
+/**
+ * How the user starts and stops a recording session.
+ * 
+ * Replaces the two booleans `push_to_talk` and `always_on_microphone` that
+ * previously co-existed and could produce an ambiguous combined state.
+ * 
+ * ## Migration (T11)
+ * - Old `push_to_talk = true`         → `RecordingMode::PushToTalk`
+ * - Old `always_on_microphone = true`  → `RecordingMode::AlwaysOn`
+ * - Both `false` (the default)         → `RecordingMode::Toggle`
+ */
+export type RecordingMode = 
+/**
+ * Press shortcut once to start, press again to stop (default).
+ */
+"toggle" | 
+/**
+ * Hold shortcut to record, release to stop.
+ */
+"push_to_talk" | 
+/**
+ * Microphone is always listening; VAD decides when a utterance starts/ends.
+ */
+"always_on"
+export type RecordingRetentionPeriod = 
+/**
+ * Kept for deserialization compatibility with older settings files.
+ * Treated as `Months3` at runtime — "never delete indefinitely" is not
+ * a GDPR-compliant default.
+ */
+"preserve_limit" | "days_3" | "weeks_2" | "months_3"
 export type RuntimeDiagnostics = { captured_at_ms: number; app_version: string; lifecycle_state: TranscriptionLifecycleState; last_lifecycle_event: LifecycleStateEvent; recent_errors: RuntimeErrorEvent[]; selected_model: string; loaded_model_id: string | null; loaded_model_name: string | null; model_loaded: boolean; paste_method: string; clipboard_handling: string; selected_language: string; selected_microphone: string | null; selected_output_device: string | null; is_recording: boolean; is_paused: boolean; operation_id: number | null; active_stage: TranscriptionLifecycleState | null; last_audio_error: string | null; partial_result: boolean; device_resolution: string | null; cancelled_at_stage: TranscriptionLifecycleState | null; current_app_context: AppTranscriptionContext | null; last_transcription_app_context: AppTranscriptionContext | null; adaptive_voice_profile_enabled: boolean; adaptive_voice_profile: VoiceProfile | null; active_voice_runtime_adjustment: VoiceRuntimeAdjustment | null; machine_status: MachineStatusSnapshot | null; recent_pipeline_profiles: PipelineProfileEvent[]; adaptive_machine_profile: AdaptiveMachineProfile | null; adaptive_calibration_state: CalibrationStatusSnapshot[] }
 export type RuntimeErrorEvent = { code: string; stage: RuntimeErrorStage; message: string; recoverable: boolean; operation_id: number | null; device_name: string | null; model_id: string | null; timestamp_ms: number }
 export type RuntimeErrorStage = "capture" | "vad" | "transcription" | "post_process" | "paste" | "shortcut" | "model" | "system" | "unknown"
@@ -1305,9 +1363,58 @@ export type WhisperModelAdaptiveConfig = { backend: WhisperBackendPreference; th
 
 import {
 	invoke as TAURI_INVOKE,
-	Channel as _TAURI_CHANNEL,
+	Channel as TAURI_CHANNEL,
 } from "@tauri-apps/api/core";
+import * as TAURI_API_EVENT from "@tauri-apps/api/event";
+import { type WebviewWindow as __WebviewWindow__ } from "@tauri-apps/api/webviewWindow";
+
+type __EventObj__<T> = {
+	listen: (
+		cb: TAURI_API_EVENT.EventCallback<T>,
+	) => ReturnType<typeof TAURI_API_EVENT.listen<T>>;
+	once: (
+		cb: TAURI_API_EVENT.EventCallback<T>,
+	) => ReturnType<typeof TAURI_API_EVENT.once<T>>;
+	emit: null extends T
+		? (payload?: T) => ReturnType<typeof TAURI_API_EVENT.emit>
+		: (payload: T) => ReturnType<typeof TAURI_API_EVENT.emit>;
+};
 
 export type Result<T, E> =
 	| { status: "ok"; data: T }
 	| { status: "error"; error: E };
+
+function __makeEvents__<T extends Record<string, any>>(
+	mappings: Record<keyof T, string>,
+) {
+	return new Proxy(
+		{} as unknown as {
+			[K in keyof T]: __EventObj__<T[K]> & {
+				(handle: __WebviewWindow__): __EventObj__<T[K]>;
+			};
+		},
+		{
+			get: (_, event) => {
+				const name = mappings[event as keyof T];
+
+				return new Proxy((() => {}) as any, {
+					apply: (_, __, [window]: [__WebviewWindow__]) => ({
+						listen: (arg: any) => window.listen(name, arg),
+						once: (arg: any) => window.once(name, arg),
+						emit: (arg: any) => window.emit(name, arg),
+					}),
+					get: (_, command: keyof __EventObj__<any>) => {
+						switch (command) {
+							case "listen":
+								return (arg: any) => TAURI_API_EVENT.listen(name, arg);
+							case "once":
+								return (arg: any) => TAURI_API_EVENT.once(name, arg);
+							case "emit":
+								return (arg: any) => TAURI_API_EVENT.emit(name, arg);
+						}
+					},
+				});
+			},
+		},
+	);
+}

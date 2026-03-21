@@ -2,11 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Loader2, LockKeyhole, ShieldCheck, Sparkles } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
-import type {
-  AuthPayload,
-  AuthSession,
-  ChangePasswordPayload,
-} from "@/lib/auth/types";
+import type { AuthPayload, AuthSession, ChangePasswordPayload } from "@/lib/auth/types";
 import { authClient } from "@/lib/auth/client";
 import VocalTypeLogo from "../icons/VocalTypeLogo";
 import { Button } from "../ui/Button";
@@ -27,73 +23,25 @@ interface AuthPortalProps {
 type Mode = "login" | "register" | "forgot";
 type ForgotStep = "email" | "code" | "done";
 
-const emailExistsPatterns = [
-  "already exists",
-  "already registered",
-  "already in use",
-  "email taken",
-  "duplicate",
-  "déjà utilisé",
-  "deja utilise",
-  "déjà enregistré",
-  "existe déjà",
-];
+const emailExistsPatterns = ["already exists", "already registered", "already in use", "email taken", "duplicate", "déjà utilisé", "deja utilise", "déjà enregistré", "existe déjà"];
+const deviceExistsPatterns = ["existe déjà sur cet appareil", "device already registered", "account already exists on this device", "un compte existe"];
+const labelClass = "text-[11px] font-semibold uppercase tracking-[0.18em] text-text/60";
+const inputClass = "w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-[14px] text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60 focus:bg-white/[0.06]";
 
-const deviceExistsPatterns = [
-  "existe déjà sur cet appareil",
-  "device already registered",
-  "account already exists on this device",
-  "un compte existe",
-];
+const hasPattern = (message: string, patterns: string[]) => patterns.some((p) => message.toLowerCase().includes(p));
 
-const labelClass =
-  "text-[11px] font-semibold uppercase tracking-[0.18em] text-text/60";
-const inputClass =
-  "w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-[14px] text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60 focus:bg-white/[0.06]";
-
-const hasPattern = (message: string, patterns: string[]) => {
-  const lower = message.toLowerCase();
-  return patterns.some((pattern) => lower.includes(pattern));
-};
-
-const formatAccessLabel = (
-  session: AuthSession,
-  t: (key: string, opts?: Record<string, unknown>) => string,
-) => {
+const formatAccessLabel = (session: AuthSession, t: (key: string, opts?: Record<string, unknown>) => string) => {
   if (session.subscription.status === "active") return t("auth.access.active");
   if (session.subscription.status === "trialing") {
-    if (!session.subscription.trial_ends_at) {
-      return t("auth.access.trialActive");
-    }
-    const diff = Math.max(
-      0,
-      Math.ceil(
-        (new Date(session.subscription.trial_ends_at).getTime() - Date.now()) /
-          (1000 * 60 * 60 * 24),
-      ),
-    );
-    return diff <= 1
-      ? t("auth.access.trialEndsToday")
-      : t("auth.access.trialDaysLeft", { count: diff });
+    if (!session.subscription.trial_ends_at) return t("auth.access.trialActive");
+    const diff = Math.max(0, Math.ceil((new Date(session.subscription.trial_ends_at).getTime() - Date.now()) / 86400000));
+    return diff <= 1 ? t("auth.access.trialEndsToday") : t("auth.access.trialDaysLeft", { count: diff });
   }
-  if (session.subscription.status === "canceled") {
-    return t("auth.access.canceled");
-  }
+  if (session.subscription.status === "canceled") return t("auth.access.canceled");
   return t("auth.access.trialEnded");
 };
 
-export const AuthPortal = ({
-  isLoading,
-  isSubmitting,
-  error,
-  session,
-  onLogin,
-  onRegister,
-  onStartCheckout,
-  onOpenBillingPortal,
-  onRefreshSession,
-  onLogout,
-}: AuthPortalProps) => {
+export const AuthPortal = ({ isLoading, isSubmitting, error, session, onLogin, onRegister, onStartCheckout, onOpenBillingPortal, onRefreshSession, onLogout }: AuthPortalProps) => {
   const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("login");
   const [name, setName] = useState("");
@@ -125,9 +73,7 @@ export const AuthPortal = ({
   }, []);
 
   useEffect(() => {
-    if (error && mode === "register" && hasPattern(error, emailExistsPatterns)) {
-      setMode("login");
-    }
+    if (error && mode === "register" && hasPattern(error, emailExistsPatterns)) setMode("login");
     if (error && mode === "register" && hasPattern(error, deviceExistsPatterns)) {
       setDeviceAlreadyRegistered(true);
       setMode("login");
@@ -135,41 +81,23 @@ export const AuthPortal = ({
   }, [error, mode]);
 
   const hasAccess = session?.subscription.has_access ?? false;
-  const accessLabel = useMemo(
-    () => (session ? formatAccessLabel(session, t as any) : null),
-    [session, t],
-  );
+  const accessLabel = useMemo(() => (session ? formatAccessLabel(session, t as any) : null), [session, t]);
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLocalError(null);
     if (mode === "register") {
-      if (deviceAlreadyRegistered) {
-        setLocalError(t("auth.errors.deviceAlreadyRegistered"));
-        return;
-      }
+      if (deviceAlreadyRegistered) return void setLocalError(t("auth.errors.deviceAlreadyRegistered"));
       if (await authClient.isEmailRegisteredOnDevice(email)) {
         setMode("login");
-        setLocalError(t("auth.errors.emailExistsSwitchedToLogin"));
-        return;
+        return void setLocalError(t("auth.errors.emailExistsSwitchedToLogin"));
       }
     }
-    const payload: AuthPayload = {
-      email: email.trim(),
-      password,
-      ...(mode === "register" && name.trim() ? { name: name.trim() } : {}),
-    };
-    if (mode === "register") return onRegister(payload);
-    return onLogin(payload);
+    const payload: AuthPayload = { email: email.trim(), password, ...(mode === "register" && name.trim() ? { name: name.trim() } : {}) };
+    return mode === "register" ? onRegister(payload) : onLogin(payload);
   };
 
-  const displayError = localError
-    ? localError
-    : error && !hasPattern(error, deviceExistsPatterns)
-      ? hasPattern(error, emailExistsPatterns) && mode === "login"
-        ? t("auth.errors.emailExistsSwitchedToLogin")
-        : error
-      : null;
+  const displayError = localError ? localError : error && !hasPattern(error, deviceExistsPatterns) ? hasPattern(error, emailExistsPatterns) && mode === "login" ? t("auth.errors.emailExistsSwitchedToLogin") : error : null;
 
   const openBillingLink = async (action: () => Promise<string>, refresh?: boolean) => {
     setBillingBusy(true);
@@ -199,17 +127,10 @@ export const AuthPortal = ({
   const handleForgotReset = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setForgotError(null);
-    if (forgotNewPwd !== forgotConfirmPwd) {
-      setForgotError(t("auth.errors.passwordsDoNotMatch"));
-      return;
-    }
+    if (forgotNewPwd !== forgotConfirmPwd) return void setForgotError(t("auth.errors.passwordsDoNotMatch"));
     setForgotBusy(true);
     try {
-      const newSession = await authClient.resetPassword({
-        email: email.trim(),
-        code: forgotCode.trim(),
-        new_password: forgotNewPwd,
-      });
+      const newSession = await authClient.resetPassword({ email: email.trim(), code: forgotCode.trim(), new_password: forgotNewPwd });
       await authClient.setStoredSession(newSession);
       setForgotStep("done");
       setTimeout(() => {
@@ -221,32 +142,29 @@ export const AuthPortal = ({
       }, 2000);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setForgotError(
-        message.toLowerCase().includes("invalide") ||
-          message.toLowerCase().includes("expired") ||
-          message.toLowerCase().includes("expiré")
-          ? t("auth.errors.invalidResetCode")
-          : message || t("auth.errors.networkError"),
-      );
+      setForgotError(message.toLowerCase().includes("invalide") || message.toLowerCase().includes("expired") || message.toLowerCase().includes("expiré") ? t("auth.errors.invalidResetCode") : message || t("auth.errors.networkError"));
     } finally {
       setForgotBusy(false);
     }
   };
 
+  const handleBackToLogin = () => {
+    setMode("login");
+    setForgotStep("email");
+    setForgotCode("");
+    setForgotNewPwd("");
+    setForgotConfirmPwd("");
+    setForgotError(null);
+  };
+
   const handleChangePassword = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setChangePwdError(null);
-    if (newPwd !== confirmPwd) {
-      setChangePwdError(t("auth.errors.passwordsDoNotMatch"));
-      return;
-    }
+    if (newPwd !== confirmPwd) return void setChangePwdError(t("auth.errors.passwordsDoNotMatch"));
     if (!session) return;
     setChangePwdBusy(true);
     try {
-      const payload: ChangePasswordPayload = {
-        old_password: oldPwd,
-        new_password: newPwd,
-      };
+      const payload: ChangePasswordPayload = { old_password: oldPwd, new_password: newPwd };
       await authClient.changePassword(session.token, payload);
       setShowChangePassword(false);
       setOldPwd("");
@@ -255,13 +173,7 @@ export const AuthPortal = ({
       setTimeout(() => onLogout(), 1500);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      setChangePwdError(
-        message.toLowerCase().includes("actuel") ||
-          message.toLowerCase().includes("incorrect") ||
-          message.toLowerCase().includes("wrong")
-          ? t("auth.errors.wrongOldPassword")
-          : message || t("auth.errors.networkError"),
-      );
+      setChangePwdError(message.toLowerCase().includes("actuel") || message.toLowerCase().includes("incorrect") || message.toLowerCase().includes("wrong") ? t("auth.errors.wrongOldPassword") : message || t("auth.errors.networkError"));
     } finally {
       setChangePwdBusy(false);
     }
@@ -274,9 +186,7 @@ export const AuthPortal = ({
           <section className="rounded-[28px] border border-white/8 bg-background-ui/72 p-8 shadow-[0_30px_80px_rgba(0,0,0,0.35)] backdrop-blur">
             <div className="mb-10 flex items-center justify-between gap-4">
               <VocalTypeLogo width={180} />
-              <div className="rounded-full border border-logo-primary/20 bg-logo-primary/10 px-4 py-2 text-xs font-semibold text-logo-primary">
-                {t("auth.trialBadge")}
-              </div>
+              <div className="rounded-full border border-logo-primary/20 bg-logo-primary/10 px-4 py-2 text-xs font-semibold text-logo-primary">{t("auth.trialBadge")}</div>
             </div>
             <div className="space-y-5">
               <p className="text-xs font-semibold uppercase tracking-[0.28em] text-logo-primary/80">{t("auth.paidAccess")}</p>
@@ -284,11 +194,7 @@ export const AuthPortal = ({
               <p className="max-w-xl text-[15px] leading-7 text-text/68">{t("auth.subheadline")}</p>
             </div>
             <div className="mt-10 grid gap-4 md:grid-cols-3">
-              {[
-                { icon: Sparkles, title: t("auth.features.trial.title"), description: t("auth.features.trial.description") },
-                { icon: ShieldCheck, title: t("auth.features.subscription.title"), description: t("auth.features.subscription.description") },
-                { icon: LockKeyhole, title: t("auth.features.billing.title"), description: t("auth.features.billing.description") },
-              ].map((item) => (
+              {[{ icon: Sparkles, title: t("auth.features.trial.title"), description: t("auth.features.trial.description") }, { icon: ShieldCheck, title: t("auth.features.subscription.title"), description: t("auth.features.subscription.description") }, { icon: LockKeyhole, title: t("auth.features.billing.title"), description: t("auth.features.billing.description") }].map((item) => (
                 <div key={item.title} className="rounded-2xl border border-white/8 bg-white/4 p-4">
                   <item.icon className="mb-3 h-5 w-5 text-logo-primary" />
                   <h2 className="mb-2 text-sm font-semibold">{item.title}</h2>
@@ -297,7 +203,6 @@ export const AuthPortal = ({
               ))}
             </div>
           </section>
-
           <section className="rounded-[28px] border border-logo-primary/18 bg-[#121212]/92 p-7 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
             {!session && mode !== "forgot" && (
               <div className="mb-6 flex rounded-full bg-white/5 p-1 text-sm">
@@ -305,9 +210,7 @@ export const AuthPortal = ({
                 <button className={`flex-1 rounded-full px-4 py-2.5 font-medium transition ${mode === "login" ? "bg-logo-primary text-black shadow-[0_10px_30px_rgba(201,168,76,0.2)]" : "text-text/65 hover:text-text/82"}`} onClick={() => setMode("login")} type="button">{t("auth.login")}</button>
               </div>
             )}
-
             {deviceAlreadyRegistered && !session && mode === "login" && <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">{t("auth.errors.deviceAlreadyRegistered")}</div>}
-
             {session ? (
               <div className="space-y-5">
                 <div className="rounded-2xl border border-logo-primary/20 bg-logo-primary/8 p-5">
