@@ -62,18 +62,21 @@ export const MachineStatusBar: React.FC<{ variant?: "banner" | "sidebar" }> = ({
       void refresh();
     }, 30_000);
 
-    const unlistenAdaptive = listen("adaptive-profile-updated", () => {
-      void refresh();
+    let cleanupAdaptive: (() => void) | undefined;
+    let cleanupLifecycle: (() => void) | undefined;
+
+    listen("adaptive-profile-updated", () => { void refresh(); }).then((fn) => {
+      if (!active) { fn(); } else { cleanupAdaptive = fn; }
     });
-    const unlistenLifecycle = listen("transcription-lifecycle", () => {
-      void refresh();
+    listen("transcription-lifecycle", () => { void refresh(); }).then((fn) => {
+      if (!active) { fn(); } else { cleanupLifecycle = fn; }
     });
 
     return () => {
       active = false;
       window.clearInterval(interval);
-      void unlistenAdaptive.then((fn) => fn());
-      void unlistenLifecycle.then((fn) => fn());
+      cleanupAdaptive?.();
+      cleanupLifecycle?.();
     };
   }, []);
 

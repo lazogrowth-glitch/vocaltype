@@ -19,8 +19,9 @@ use parakeet_rs::{
 };
 use serde::Serialize;
 use std::panic::{catch_unwind, AssertUnwindSafe};
+use parking_lot::{Condvar, Mutex, MutexGuard};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime};
 use tauri::{AppHandle, Emitter, Manager};
@@ -315,18 +316,15 @@ impl TranscriptionManager {
                 }
                 debug!("Idle watcher thread shutting down gracefully");
             });
-            *manager.watcher_handle.lock().unwrap() = Some(handle);
+            *manager.watcher_handle.lock() = Some(handle);
         }
 
         Ok(manager)
     }
 
-    /// Lock the engine mutex, recovering from poison if a previous transcription panicked.
+    /// Lock the engine mutex.
     fn lock_engine(&self) -> MutexGuard<'_, Option<LoadedEngine>> {
-        self.engine.lock().unwrap_or_else(|poisoned| {
-            warn!("Engine mutex was poisoned by a previous panic, recovering");
-            poisoned.into_inner()
-        })
+        self.engine.lock()
     }
 
     pub fn is_model_loaded(&self) -> bool {
@@ -355,7 +353,7 @@ impl TranscriptionManager {
         }
         self.whisper_gpu_active.store(false, Ordering::Relaxed);
         {
-            let mut current_model = self.current_model_id.lock().unwrap();
+            let mut current_model = self.current_model_id.lock();
             *current_model = None;
         }
         set_active_runtime_model(&self.app_handle, None);
@@ -723,7 +721,7 @@ impl TranscriptionManager {
             *engine = Some(loaded_engine);
         }
         {
-            let mut current_model = self.current_model_id.lock().unwrap();
+            let mut current_model = self.current_model_id.lock();
             *current_model = Some(model_id.to_string());
         }
         set_active_runtime_model(&self.app_handle, Some(model_id.to_string()));
@@ -750,7 +748,7 @@ impl TranscriptionManager {
 
     /// Kicks off the model loading in a background thread if it's not already loaded
     pub fn initiate_model_load(&self) {
-        let mut is_loading = self.is_loading.lock().unwrap();
+        let mut is_loading = self.is_loading.lock();
         if *is_loading || self.is_model_loaded() {
             return;
         }
@@ -762,14 +760,14 @@ impl TranscriptionManager {
             if let Err(e) = self_clone.load_model(&settings.selected_model) {
                 error!("Failed to load model: {}", e);
             }
-            let mut is_loading = self_clone.is_loading.lock().unwrap();
+            let mut is_loading = self_clone.is_loading.lock();
             *is_loading = false;
             self_clone.loading_condvar.notify_all();
         });
     }
 
     pub fn get_current_model(&self) -> Option<String> {
-        let current_model = self.current_model_id.lock().unwrap();
+        let current_model = self.current_model_id.lock();
         current_model.clone()
     }
 
@@ -823,9 +821,9 @@ impl TranscriptionManager {
         // Check if model is loaded, if not try to load it
         {
             // If the model is loading, wait for it to complete.
-            let mut is_loading = self.is_loading.lock().unwrap();
+            let mut is_loading = self.is_loading.lock();
             while *is_loading {
-                is_loading = self.loading_condvar.wait(is_loading).unwrap();
+                self.loading_condvar.wait(&mut is_loading);
             }
 
             let engine_guard = self.lock_engine();
@@ -1111,10 +1109,7 @@ impl TranscriptionManager {
 
                     // Clear the model ID so it will be reloaded on next attempt
                     {
-                        let mut current_model = self
-                            .current_model_id
-                            .lock()
-                            .unwrap_or_else(|e| e.into_inner());
+                        let mut current_model = self.current_model_id.lock();
                         *current_model = None;
                     }
 
@@ -1203,7 +1198,7 @@ impl Drop for TranscriptionManager {
         self.shutdown_signal.store(true, Ordering::Relaxed);
 
         // Wait for the thread to finish gracefully
-        if let Some(handle) = self.watcher_handle.lock().unwrap().take() {
+        if let Some(handle) = self.watcher_handle.lock().take() {
             if let Err(e) = handle.join() {
                 warn!("Failed to join idle watcher thread: {:?}", e);
             } else {

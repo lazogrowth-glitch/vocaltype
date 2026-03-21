@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useSettingsStore } from "../stores/settingsStore";
 import type { AppSettings as Settings, AudioDevice } from "@/bindings";
 
@@ -41,6 +41,25 @@ interface UseSettingsReturn {
   ) => Promise<void>;
   updatePostProcessModel: (providerId: string, model: string) => Promise<void>;
   fetchPostProcessModels: (providerId: string) => Promise<string[]>;
+}
+
+export function useDebouncedSetting<K extends keyof Settings>(
+  key: K,
+  delayMs = 200,
+) {
+  const updateSetting = useSettingsStore((s) => s.updateSetting);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  return useCallback(
+    (value: Settings[K]) => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        updateSetting(key, value);
+      }, delayMs);
+    },
+    [key, delayMs, updateSetting],
+  );
 }
 
 export const useSettings = (): UseSettingsReturn => {

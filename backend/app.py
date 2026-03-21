@@ -5,6 +5,7 @@ import os
 import secrets
 import smtplib
 import sqlite3
+import ipaddress
 import re
 import time
 import uuid
@@ -57,6 +58,8 @@ def parse_allowed_origins() -> list[str]:
 CORS_ALLOWED_ORIGINS = parse_allowed_origins()
 ACCESS_TOKEN_TTL_MINUTES = env_int("ACCESS_TOKEN_TTL_MINUTES", 15, 5)
 PASSWORD_MIN_LENGTH = env_int("MIN_PASSWORD_LENGTH", 12, 12)
+TRUST_PROXY_COUNT = env_int("TRUST_PROXY_COUNT", 0, 0)
+HSTS_MAX_AGE_SECONDS = env_int("HSTS_MAX_AGE_SECONDS", 31536000, 0)
 RATE_LIMIT_BUCKETS: defaultdict[str, deque[float]] = defaultdict(deque)
 RATE_LIMIT_LOCK = Lock()
 
@@ -108,11 +111,50 @@ def utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+class ValidationError(ValueError):
+    pass
+
+
+def normalize_ip(value: str | None) -> str | None:
+    if not value:
+        return None
+    candidate = value.strip()
+    if not candidate:
+        return None
+    try:
+        return str(ipaddress.ip_address(candidate))
+    except ValueError:
+        return None
+
+
+def forwarded_ip_chain() -> list[str]:
+    header = request.headers.get("X-Forwarded-For", "")
+    ips: list[str] = []
+    for part in header.split(","):
+        normalized = normalize_ip(part)
+        if normalized:
+            ips.append(normalized)
+    return ips
+
+
+def request_client_ip() -> str:
+    remote_ip = normalize_ip(request.remote_addr)
+    if TRUST_PROXY_COUNT <= 0:
+        return remote_ip or "unknown"
+
+    chain = forwarded_ip_chain()
+    if remote_ip and (not chain or chain[-1] != remote_ip):
+        chain.append(remote_ip)
+
+    if not chain:
+        return remote_ip or "unknown"
+
+    client_index = max(0, len(chain) - TRUST_PROXY_COUNT - 1)
+    return chain[client_index]
+
+
 def client_ip() -> str:
-    forwarded_for = request.headers.get("X-Forwarded-For", "")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
-    return request.remote_addr or "unknown"
+    return request_client_ip()
 
 
 def log_security_event(event: str, **fields) -> None:
@@ -127,6 +169,35 @@ def log_security_event(event: str, **fields) -> None:
 
 def normalize_email(value: str) -> str:
     return value.strip().lower()
+
+
+def expect_json_object() -> dict:
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        raise ValidationError("Corps JSON invalide")
+    return data
+
+
+def read_string(
+    data: dict,
+    field_name: str,
+    *,
+    required: bool = False,
+    trim: bool = True,
+    max_length: int | None = None,
+) -> str:
+    value = data.get(field_name, "")
+    if value is None:
+        value = ""
+    if not isinstance(value, str):
+        raise ValidationError(f"Champ invalide: {field_name}")
+    if trim:
+        value = value.strip()
+    if max_length is not None and len(value) > max_length:
+        raise ValidationError(f"Champ trop long: {field_name}")
+    if required and not value:
+        raise ValidationError(f"Champ requis: {field_name}")
+    return value
 
 
 def email_is_valid(email: str) -> bool:
@@ -395,10 +466,7 @@ def parse_iso(value: str | None):
 
 
 def get_client_ip() -> str:
-    forwarded_for = request.headers.get("X-Forwarded-For", "")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip() or "unknown"
-    return request.remote_addr or "unknown"
+    return request_client_ip()
 
 
 def normalize_rate_limit_key(scope: str, identifier: str) -> str:
@@ -598,7 +666,18 @@ def add_security_headers(response):
         "Permissions-Policy",
         "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=()",
     )
+    forwarded_proto = request.headers.get("X-Forwarded-Proto", "")
+    if HSTS_MAX_AGE_SECONDS > 0 and (request.is_secure or forwarded_proto == "https"):
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            f"max-age={HSTS_MAX_AGE_SECONDS}; includeSubDomains",
+        )
     return response
+
+
+@app.errorhandler(ValidationError)
+def handle_validation_error(error: ValidationError):
+    return jsonify({"error": str(error)}), 400
 
 
 def require_secret_configured():
@@ -767,11 +846,11 @@ def health():
 
 @app.route("/auth/register", methods=["POST"])
 def register():
-    data = request.get_json(silent=True) or {}
-    email = normalize_email(data.get("email", ""))
-    password = data.get("password", "")
-    name = data.get("name", "").strip() or None
-    device_id = data.get("device_id", "").strip() or None
+    data = expect_json_object()
+    email = normalize_email(read_string(data, "email", required=True, max_length=254))
+    password = read_string(data, "password", required=True, trim=False, max_length=1024)
+    name = read_string(data, "name", max_length=120) or None
+    device_id = read_string(data, "device_id", max_length=128) or None
     ip_address = client_ip()
 
     response = rate_limit_response(
@@ -854,10 +933,10 @@ def register():
 
 @app.route("/auth/login", methods=["POST"])
 def login():
-    data = request.get_json(silent=True) or {}
-    email = normalize_email(data.get("email", ""))
-    password = data.get("password", "")
-    device_id = data.get("device_id", "").strip() or None
+    data = expect_json_object()
+    email = normalize_email(read_string(data, "email", required=True, max_length=254))
+    password = read_string(data, "password", required=True, trim=False, max_length=1024)
+    device_id = read_string(data, "device_id", max_length=128) or None
     ip_address = client_ip()
 
     response = rate_limit_response(
@@ -1019,8 +1098,8 @@ def webhook():
 
 @app.route("/admin/activate", methods=["POST"])
 def admin_activate():
-    data = request.get_json(silent=True) or {}
-    email = normalize_email(data.get("email", ""))
+    data = expect_json_object()
+    email = normalize_email(read_string(data, "email", required=True, max_length=254))
     ip_address = client_ip()
     admin_subject = get_current_admin_subject("admin:activate")
 
@@ -1036,9 +1115,6 @@ def admin_activate():
     if not admin_subject:
         log_security_event("admin_activate_denied", email=email, ip=ip_address)
         return jsonify({"error": "Non autorisé"}), 401
-
-    if not email:
-        return jsonify({"error": "Email requis"}), 400
 
     db = get_db()
     try:
@@ -1077,8 +1153,8 @@ def admin_activate():
 
 @app.route("/auth/forgot-password", methods=["POST"])
 def forgot_password():
-    data = request.get_json(silent=True) or {}
-    email = data.get("email", "").strip().lower()
+    data = expect_json_object()
+    email = normalize_email(read_string(data, "email", required=True, max_length=254))
     client_ip = get_client_ip()
 
     retry_after = enforce_rate_limits(
@@ -1136,9 +1212,9 @@ def forgot_password():
 
 @app.route("/auth/verify-reset-code", methods=["POST"])
 def verify_reset_code():
-    data = request.get_json(silent=True) or {}
-    email = normalize_email(data.get("email", ""))
-    code = data.get("code", "").strip()
+    data = expect_json_object()
+    email = normalize_email(read_string(data, "email", required=True, max_length=254))
+    code = read_string(data, "code", required=True, max_length=6)
     client_ip = get_client_ip()
 
     retry_after = enforce_rate_limits(
@@ -1193,10 +1269,12 @@ def verify_reset_code():
 
 @app.route("/auth/reset-password", methods=["POST"])
 def reset_password():
-    data = request.get_json(silent=True) or {}
-    email = normalize_email(data.get("email", ""))
-    code = data.get("code", "").strip()
-    new_password = data.get("new_password", "")
+    data = expect_json_object()
+    email = normalize_email(read_string(data, "email", required=True, max_length=254))
+    code = read_string(data, "code", required=True, max_length=6)
+    new_password = read_string(
+        data, "new_password", required=True, trim=False, max_length=1024
+    )
     client_ip = get_client_ip()
 
     response = rate_limit_response(
@@ -1290,9 +1368,13 @@ def reset_password():
 @app.route("/auth/change-password", methods=["POST"])
 @auth_required
 def change_password(user):
-    data = request.get_json(silent=True) or {}
-    old_password = data.get("old_password", "")
-    new_password = data.get("new_password", "")
+    data = expect_json_object()
+    old_password = read_string(
+        data, "old_password", required=True, trim=False, max_length=1024
+    )
+    new_password = read_string(
+        data, "new_password", required=True, trim=False, max_length=1024
+    )
     ip_address = client_ip()
 
     if not check_password_hash(user["password_hash"], old_password):

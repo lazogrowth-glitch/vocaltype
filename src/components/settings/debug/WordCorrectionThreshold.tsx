@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Slider } from "../../ui/Slider";
-import { useSettings } from "../../../hooks/useSettings";
+import { useDebouncedSetting, useSettings } from "../../../hooks/useSettings";
 
 interface WordCorrectionThresholdProps {
   descriptionMode?: "tooltip" | "inline";
@@ -12,11 +12,11 @@ export const WordCorrectionThreshold: React.FC<
   WordCorrectionThresholdProps
 > = ({ descriptionMode = "tooltip", grouped = false }) => {
   const { t } = useTranslation();
-  const { settings, updateSetting } = useSettings();
-
-  const handleThresholdChange = (value: number) => {
-    updateSetting("word_correction_threshold", value);
-  };
+  const { settings } = useSettings();
+  const handleThresholdChange = useDebouncedSetting(
+    "word_correction_threshold",
+    200,
+  );
 
   return (
     <Slider

@@ -12,9 +12,127 @@ use crate::runtime_observability::{collect_runtime_diagnostics, RuntimeDiagnosti
 use crate::settings::{get_settings, write_settings, AppSettings, CalibrationPhase, LogLevel};
 use crate::utils::cancel_current_operation;
 use sha2::{Digest, Sha256};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_opener::OpenerExt;
+
+const MAX_IMPORTABLE_JSON_BYTES: u64 = 256 * 1024;
+
+enum JsonPathAccess {
+    Read,
+    Write,
+}
+
+fn allowed_user_json_roots(app: &AppHandle) -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    for candidate in [
+        app.path().app_data_dir().ok(),
+        app.path().app_config_dir().ok(),
+        app.path().download_dir().ok(),
+        app.path().document_dir().ok(),
+        app.path().desktop_dir().ok(),
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if !roots.iter().any(|existing| existing == &candidate) {
+            roots.push(candidate);
+        }
+    }
+    roots
+}
+
+fn path_is_within_root(path: &Path, root: &Path) -> bool {
+    path == root || path.starts_with(root)
+}
+
+fn validate_user_json_path(
+    app: &AppHandle,
+    path: &str,
+    access: JsonPathAccess,
+    purpose: &str,
+) -> Result<PathBuf, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err(format!("Missing path for {}", purpose));
+    }
+
+    let candidate = PathBuf::from(trimmed);
+    if !candidate.is_absolute() {
+        return Err(format!("Path for {} must be absolute", purpose));
+    }
+    if candidate.extension().and_then(|ext| ext.to_str()) != Some("json") {
+        return Err(format!("Path for {} must point to a .json file", purpose));
+    }
+
+    let allowed_roots = allowed_user_json_roots(app);
+    if allowed_roots.is_empty() {
+        return Err(format!("No writable roots are available for {}", purpose));
+    }
+
+    let resolved_path = match access {
+        JsonPathAccess::Read => candidate.canonicalize().map_err(|err| {
+            format!(
+                "Failed to resolve path for {} '{}': {}",
+                purpose,
+                candidate.display(),
+                err
+            )
+        })?,
+        JsonPathAccess::Write => {
+            let parent = candidate.parent().ok_or_else(|| {
+                format!("Path for {} must include a parent directory", purpose)
+            })?;
+            let resolved_parent = parent.canonicalize().map_err(|err| {
+                format!(
+                    "Failed to resolve parent directory for {} '{}': {}",
+                    purpose,
+                    parent.display(),
+                    err
+                )
+            })?;
+            resolved_parent.join(
+                candidate
+                    .file_name()
+                    .ok_or_else(|| format!("Path for {} must include a file name", purpose))?,
+            )
+        }
+    };
+
+    let root_matches = allowed_roots.into_iter().any(|root| {
+        let resolved_root = root.canonicalize().unwrap_or(root);
+        path_is_within_root(&resolved_path, &resolved_root)
+    });
+    if !root_matches {
+        return Err(format!(
+            "Path for {} must stay inside app data, config, Downloads, Documents, or Desktop",
+            purpose
+        ));
+    }
+
+    if matches!(access, JsonPathAccess::Read) {
+        let metadata = std::fs::metadata(&resolved_path).map_err(|err| {
+            format!(
+                "Failed to read metadata for {} '{}': {}",
+                purpose,
+                resolved_path.display(),
+                err
+            )
+        })?;
+        if !metadata.is_file() {
+            return Err(format!("Path for {} must point to a file", purpose));
+        }
+        if metadata.len() > MAX_IMPORTABLE_JSON_BYTES {
+            return Err(format!(
+                "JSON file for {} exceeds the {} byte limit",
+                purpose, MAX_IMPORTABLE_JSON_BYTES
+            ));
+        }
+    }
+
+    Ok(resolved_path)
+}
 
 #[tauri::command]
 #[specta::specta]
@@ -140,21 +258,24 @@ pub fn open_app_data_dir(app: AppHandle) -> Result<(), String> {
 #[specta::specta]
 #[tauri::command]
 pub fn export_settings(app: AppHandle, path: String) -> Result<(), String> {
+    let output_path = validate_user_json_path(&app, &path, JsonPathAccess::Write, "settings export")?;
     let mut settings = get_settings(&app);
     settings.gemini_api_key = None;
     settings.external_script_path = None;
     settings.post_process_api_keys.values_mut().for_each(String::clear);
     let json = serde_json::to_string_pretty(&settings)
         .map_err(|e| format!("Failed to serialize settings: {}", e))?;
-    std::fs::write(&path, json).map_err(|e| format!("Failed to write file: {}", e))?;
-    log::info!("Settings exported to {}", path);
+    std::fs::write(&output_path, json).map_err(|e| format!("Failed to write file: {}", e))?;
+    log::info!("Settings exported to {}", output_path.display());
     Ok(())
 }
 
 #[specta::specta]
 #[tauri::command]
 pub fn import_settings(app: AppHandle, path: String) -> Result<(), String> {
-    let json = std::fs::read_to_string(&path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let input_path = validate_user_json_path(&app, &path, JsonPathAccess::Read, "settings import")?;
+    let json = std::fs::read_to_string(&input_path)
+        .map_err(|e| format!("Failed to read file: {}", e))?;
     let mut settings: AppSettings =
         serde_json::from_str(&json).map_err(|e| format!("Invalid settings file: {}", e))?;
     settings.gemini_api_key = None;
@@ -163,7 +284,7 @@ pub fn import_settings(app: AppHandle, path: String) -> Result<(), String> {
     write_settings(&app, settings);
     let normalized_settings = get_settings(&app);
     write_settings(&app, normalized_settings);
-    log::info!("Settings imported from {}", path);
+    log::info!("Settings imported from {}", input_path.display());
     Ok(())
 }
 
@@ -374,11 +495,14 @@ pub fn get_runtime_diagnostics(app: AppHandle) -> Result<RuntimeDiagnostics, Str
 #[specta::specta]
 #[tauri::command]
 pub fn export_runtime_diagnostics(app: AppHandle, path: String) -> Result<(), String> {
+    let output_path =
+        validate_user_json_path(&app, &path, JsonPathAccess::Write, "diagnostics export")?;
     let diagnostics = collect_runtime_diagnostics(&app);
     let json = serde_json::to_string_pretty(&diagnostics)
         .map_err(|e| format!("Failed to serialize runtime diagnostics: {}", e))?;
-    std::fs::write(&path, json).map_err(|e| format!("Failed to write diagnostics file: {}", e))?;
-    log::info!("Runtime diagnostics exported to {}", path);
+    std::fs::write(&output_path, json)
+        .map_err(|e| format!("Failed to write diagnostics file: {}", e))?;
+    log::info!("Runtime diagnostics exported to {}", output_path.display());
     Ok(())
 }
 

@@ -17,6 +17,20 @@ pub async fn get_history_entries(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn get_history_entries_paginated(
+    _app: AppHandle,
+    history_manager: State<'_, Arc<HistoryManager>>,
+    limit: usize,
+    offset: usize,
+) -> Result<(Vec<HistoryEntry>, bool), String> {
+    history_manager
+        .get_history_entries_paginated(limit, offset)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn toggle_history_entry_saved(
     _app: AppHandle,
     history_manager: State<'_, Arc<HistoryManager>>,

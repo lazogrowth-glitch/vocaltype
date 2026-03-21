@@ -88,6 +88,7 @@ transcribe-rs = { version = "0.2.5", features = ["whisper", "parakeet", "moonshi
 parakeet-rs = "0.2.0"
 handy-keys = "0.2.1"
 ferrous-opencc = "0.2.3"
+parking_lot = "0.12"
 clap = { version = "4", features = ["derive"] }
 specta = "=2.0.0-rc.22"
 specta-typescript = "0.0.9"

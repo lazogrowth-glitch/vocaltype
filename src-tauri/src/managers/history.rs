@@ -406,6 +406,50 @@ impl HistoryManager {
         Ok(entries)
     }
 
+    pub async fn get_history_entries_paginated(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<(Vec<HistoryEntry>, bool)> {
+        let fetch_limit = limit + 1;
+        let conn = self.get_connection()?;
+        let mut stmt = conn.prepare(
+            "SELECT id, file_name, timestamp, saved, title, transcription_text, post_processed_text, post_process_prompt, post_process_action_key, model_name, confidence_payload_json FROM transcription_history ORDER BY timestamp DESC LIMIT ?1 OFFSET ?2"
+        )?;
+
+        let rows = stmt.query_map(params![fetch_limit as i64, offset as i64], |row| {
+            Ok(HistoryEntry {
+                id: row.get("id")?,
+                file_name: row.get("file_name")?,
+                timestamp: row.get("timestamp")?,
+                saved: row.get("saved")?,
+                title: row.get("title")?,
+                transcription_text: row.get("transcription_text")?,
+                post_processed_text: row.get("post_processed_text")?,
+                post_process_prompt: row.get("post_process_prompt")?,
+                post_process_action_key: row
+                    .get::<_, Option<i64>>("post_process_action_key")?
+                    .and_then(|v| u8::try_from(v).ok()),
+                model_name: row.get("model_name")?,
+                confidence_payload: row
+                    .get::<_, Option<String>>("confidence_payload_json")?
+                    .and_then(|json| serde_json::from_str(&json).ok()),
+            })
+        })?;
+
+        let mut entries = Vec::new();
+        for row in rows {
+            entries.push(row?);
+        }
+
+        let has_more = entries.len() > limit;
+        if has_more {
+            entries.pop();
+        }
+
+        Ok((entries, has_more))
+    }
+
     pub fn get_latest_entry(&self) -> Result<Option<HistoryEntry>> {
         let conn = self.get_connection()?;
         Self::get_latest_entry_with_conn(&conn)

@@ -76,14 +76,25 @@ export const Tooltip: React.FC<TooltipProps> = ({
   }, [targetRef, position]);
 
   useEffect(() => {
-    updatePosition();
+    let rafId: number | null = null;
 
-    window.addEventListener("scroll", updatePosition, true);
-    window.addEventListener("resize", updatePosition);
+    const debouncedUpdate = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        updatePosition();
+      });
+    };
+
+    updatePosition(); // initial synchronous call
+
+    window.addEventListener("scroll", debouncedUpdate, { passive: true, capture: true });
+    window.addEventListener("resize", debouncedUpdate, { passive: true });
 
     return () => {
-      window.removeEventListener("scroll", updatePosition, true);
-      window.removeEventListener("resize", updatePosition);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      window.removeEventListener("scroll", debouncedUpdate, true);
+      window.removeEventListener("resize", debouncedUpdate);
     };
   }, [updatePosition]);
 

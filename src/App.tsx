@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, useRef } from "react";
+import React, { useCallback, useEffect, useState, useRef } from "react";
 import { toast, Toaster } from "sonner";
 import { useTranslation } from "react-i18next";
 import { platform } from "@tauri-apps/plugin-os";
@@ -186,31 +186,48 @@ function App() {
 
   // Listen for backend navigation events (e.g., "Show History" shortcut)
   useEffect(() => {
-    const unlisten = listen<string>("navigate-to-section", (event) => {
+    let cancelled = false;
+    let cleanup: (() => void) | undefined;
+
+    listen<string>("navigate-to-section", (event) => {
       const section = event.payload as SidebarSection;
       if (section in SECTIONS_CONFIG) {
         setCurrentSection(section);
       }
+    }).then((fn) => {
+      if (cancelled) { fn(); } else { cleanup = fn; }
     });
+
     return () => {
-      unlisten.then((fn) => fn());
+      cancelled = true;
+      cleanup?.();
     };
   }, []);
 
   useEffect(() => {
-    const unlisten = listen<string>("whisper-gpu-unavailable", () => {
+    let cancelled = false;
+    let cleanup: (() => void) | undefined;
+
+    listen<string>("whisper-gpu-unavailable", () => {
       toast.warning(t("warnings.whisperGpuUnavailable"), {
         duration: 8000,
         description: t("warnings.whisperGpuUnavailableDesc"),
       });
+    }).then((fn) => {
+      if (cancelled) { fn(); } else { cleanup = fn; }
     });
+
     return () => {
-      unlisten.then((fn) => fn());
+      cancelled = true;
+      cleanup?.();
     };
   }, [t]);
 
   useEffect(() => {
-    const unlisten = listen<{
+    let cancelled = false;
+    let cleanup: (() => void) | undefined;
+
+    listen<{
       reason?: string;
       copied_to_clipboard?: boolean;
     }>("paste-failed", (event) => {
@@ -226,14 +243,21 @@ function App() {
           }),
         },
       );
+    }).then((fn) => {
+      if (cancelled) { fn(); } else { cleanup = fn; }
     });
+
     return () => {
-      unlisten.then((fn) => fn());
+      cancelled = true;
+      cleanup?.();
     };
   }, [t]);
 
   useEffect(() => {
-    const unlisten = listen<RuntimeErrorEvent>("runtime-error", (event) => {
+    let cancelled = false;
+    let cleanup: (() => void) | undefined;
+
+    listen<RuntimeErrorEvent>("runtime-error", (event) => {
       const payload = event.payload;
       if (!payload) return;
 
@@ -266,10 +290,13 @@ function App() {
           description: reason,
         },
       );
+    }).then((fn) => {
+      if (cancelled) { fn(); } else { cleanup = fn; }
     });
 
     return () => {
-      unlisten.then((fn) => fn());
+      cancelled = true;
+      cleanup?.();
     };
   }, [t]);
 
@@ -459,7 +486,13 @@ function App() {
             ? t(SECTIONS_CONFIG[currentSection].labelKey)
             : t(SECTIONS_CONFIG.general.labelKey)}
         </h1>
-        {renderSettingsContent(currentSection)}
+        <React.Suspense fallback={
+          <div className="flex items-center justify-center h-32 text-sm text-gray-400 animate-pulse">
+            Loading...
+          </div>
+        }>
+          {renderSettingsContent(currentSection)}
+        </React.Suspense>
       </main>
     </div>
   );

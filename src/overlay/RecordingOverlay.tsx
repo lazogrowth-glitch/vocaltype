@@ -178,93 +178,71 @@ const RecordingOverlay: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-    let cleanupListeners: (() => void) | undefined;
+    let active = true;
+    const cleanups: Array<() => void> = [];
 
-    const setupEventListeners = async () => {
-      const unlistenShow = await listen("show-overlay", async (event) => {
-        await syncLanguageFromSettings();
-        const overlayState = event.payload as OverlayState;
-        setState(overlayState);
-        setIsVisible(true);
-        setIsPaused(false);
-        if (overlayState === "recording") {
-          setTimerStart(Date.now());
-          setSelectedAction(null);
-        }
+    const register = (eventName: string, handler: any) => {
+      listen(eventName, handler).then((fn) => {
+        if (!active) { fn(); } else { cleanups.push(fn); }
       });
-
-      const unlistenHide = await listen("hide-overlay", () => {
-        setIsVisible(false);
-        setSelectedAction(null);
-        setCancelPending(false);
-        setIsPaused(false);
-        if (cancelTimerRef.current) {
-          clearTimeout(cancelTimerRef.current);
-          cancelTimerRef.current = null;
-        }
-      });
-
-      const unlistenCancelPending = await listen("cancel-pending", () => {
-        setCancelPending(true);
-        if (cancelTimerRef.current) {
-          clearTimeout(cancelTimerRef.current);
-        }
-        cancelTimerRef.current = setTimeout(() => {
-          setCancelPending(false);
-          cancelTimerRef.current = null;
-        }, 1700);
-      });
-
-      const unlistenAction = await listen<ActionInfo>(
-        "action-selected",
-        (event) => {
-          setSelectedAction(event.payload);
-        },
-      );
-
-      const unlistenDeselect = await listen("action-deselected", () => {
-        setSelectedAction(null);
-      });
-
-      const unlistenPause = await listen<boolean>(
-        "recording-paused",
-        (event) => {
-          const paused = event.payload;
-          setIsPaused(paused);
-          if (paused) {
-            pauseStartRef.current = Date.now();
-          } else {
-            const pauseDuration = Date.now() - pauseStartRef.current;
-            setTimerStart((prev) => prev + pauseDuration);
-          }
-        },
-      );
-
-      if (!isMounted) {
-        unlistenShow();
-        unlistenHide();
-        unlistenCancelPending();
-        unlistenAction();
-        unlistenDeselect();
-        unlistenPause();
-        return;
-      }
-
-      cleanupListeners = () => {
-        unlistenShow();
-        unlistenHide();
-        unlistenCancelPending();
-        unlistenAction();
-        unlistenDeselect();
-        unlistenPause();
-      };
     };
 
-    setupEventListeners();
+    register("show-overlay", async (event: any) => {
+      await syncLanguageFromSettings();
+      const overlayState = event.payload as OverlayState;
+      setState(overlayState);
+      setIsVisible(true);
+      setIsPaused(false);
+      if (overlayState === "recording") {
+        setTimerStart(Date.now());
+        setSelectedAction(null);
+      }
+    });
+
+    register("hide-overlay", () => {
+      setIsVisible(false);
+      setSelectedAction(null);
+      setCancelPending(false);
+      setIsPaused(false);
+      if (cancelTimerRef.current) {
+        clearTimeout(cancelTimerRef.current);
+        cancelTimerRef.current = null;
+      }
+    });
+
+    register("cancel-pending", () => {
+      setCancelPending(true);
+      if (cancelTimerRef.current) {
+        clearTimeout(cancelTimerRef.current);
+      }
+      cancelTimerRef.current = setTimeout(() => {
+        setCancelPending(false);
+        cancelTimerRef.current = null;
+      }, 1700);
+    });
+
+    register("action-selected", (event: any) => {
+      setSelectedAction(event.payload as ActionInfo);
+    });
+
+    register("action-deselected", () => {
+      setSelectedAction(null);
+    });
+
+    register("recording-paused", (event: any) => {
+      const paused = event.payload as boolean;
+      setIsPaused(paused);
+      if (paused) {
+        pauseStartRef.current = Date.now();
+      } else {
+        const pauseDuration = Date.now() - pauseStartRef.current;
+        setTimerStart((prev) => prev + pauseDuration);
+      }
+    });
+
     return () => {
-      isMounted = false;
-      cleanupListeners?.();
+      active = false;
+      cleanups.forEach((fn) => fn());
       if (cancelTimerRef.current) {
         clearTimeout(cancelTimerRef.current);
       }

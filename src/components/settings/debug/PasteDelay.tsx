@@ -1,7 +1,7 @@
 import React from "react";
 import { useTranslation } from "react-i18next";
 import { Slider } from "../../ui/Slider";
-import { useSettings } from "../../../hooks/useSettings";
+import { useDebouncedSetting, useSettings } from "../../../hooks/useSettings";
 
 interface PasteDelayProps {
   descriptionMode?: "tooltip" | "inline";
@@ -13,11 +13,8 @@ export const PasteDelay: React.FC<PasteDelayProps> = ({
   grouped = false,
 }) => {
   const { t } = useTranslation();
-  const { settings, updateSetting } = useSettings();
-
-  const handleDelayChange = (value: number) => {
-    updateSetting("paste_delay_ms", value);
-  };
+  const { settings } = useSettings();
+  const handleDelayChange = useDebouncedSetting("paste_delay_ms", 200);
 
   return (
     <Slider

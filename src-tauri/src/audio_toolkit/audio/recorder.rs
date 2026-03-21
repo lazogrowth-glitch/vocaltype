@@ -298,6 +298,8 @@ Format: {:?}",
     }
 }
 
+const MAX_PROCESSED_SAMPLES: usize = 16_000 * 60 * 20; // 20 min at 16kHz
+
 fn run_consumer(
     in_sample_rate: u32,
     vad: Option<Arc<Mutex<Box<dyn vad::VoiceActivityDetector>>>>,
@@ -368,6 +370,10 @@ fn run_consumer(
             frame_resampler.push(&raw, &mut |frame: &[f32]| {
                 handle_frame(frame, recording, &vad, &mut processed_samples)
             });
+            if processed_samples.len() > MAX_PROCESSED_SAMPLES {
+                let excess = processed_samples.len() - MAX_PROCESSED_SAMPLES;
+                processed_samples.drain(0..excess);
+            }
         }
 
         // non-blocking check for a command

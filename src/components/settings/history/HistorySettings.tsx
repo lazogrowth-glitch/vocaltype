@@ -10,7 +10,7 @@ import {
   RefreshCw,
   Loader2,
 } from "lucide-react";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { readFile } from "@tauri-apps/plugin-fs";
 import { commands, type HistoryEntry } from "@/bindings";
@@ -18,6 +18,8 @@ import { formatDateTime } from "@/utils/dateFormat";
 import { useOsType } from "@/hooks/useOsType";
 import { useModelStore } from "@/stores/modelStore";
 import { ConfidenceText } from "./ConfidenceText";
+
+const PAGE_SIZE = 30;
 
 interface OpenRecordingsButtonProps {
   onClick: () => void;
@@ -43,19 +45,43 @@ export const HistorySettings: React.FC = () => {
   const osType = useOsType();
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const loadHistoryEntries = useCallback(async () => {
     try {
-      const result = await commands.getHistoryEntries();
-      if (result.status === "ok") {
-        setHistoryEntries(result.data);
-      }
+      const [entries, more] = await invoke<[HistoryEntry[], boolean]>(
+        "get_history_entries_paginated",
+        { limit: PAGE_SIZE, offset: 0 },
+      );
+      setHistoryEntries(entries);
+      setHasMore(more);
+      setOffset(PAGE_SIZE);
     } catch (error) {
       console.error("Failed to load history entries:", error);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const loadMoreEntries = useCallback(async () => {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const [entries, more] = await invoke<[HistoryEntry[], boolean]>(
+        "get_history_entries_paginated",
+        { limit: PAGE_SIZE, offset },
+      );
+      setHistoryEntries((prev) => [...prev, ...entries]);
+      setHasMore(more);
+      setOffset((prev) => prev + PAGE_SIZE);
+    } catch (error) {
+      console.error("Failed to load more history entries:", error);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [loadingMore, offset]);
 
   useEffect(() => {
     loadHistoryEntries();
@@ -227,6 +253,24 @@ export const HistorySettings: React.FC = () => {
               />
             ))}
           </div>
+          {hasMore && (
+            <div className="pt-3 pb-1 flex justify-center">
+              <button
+                type="button"
+                onClick={loadMoreEntries}
+                disabled={loadingMore}
+                className="text-[12px] text-white/30 transition-colors hover:text-white/55 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loadingMore
+                  ? t("settings.history.loadingMore", {
+                      defaultValue: "Loading…",
+                    })
+                  : t("settings.history.loadMore", {
+                      defaultValue: "Load more",
+                    })}
+              </button>
+            </div>
+          )}
         </div>
       </div>
     </div>

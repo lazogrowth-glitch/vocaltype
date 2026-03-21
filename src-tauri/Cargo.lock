@@ -7864,6 +7864,7 @@ dependencies = [
  "natural",
  "once_cell",
  "parakeet-rs",
+ "parking_lot",
  "rdev 0.5.0-2",
  "regex",
  "reqwest 0.12.28",

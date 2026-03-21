@@ -1,4 +1,4 @@
-import React from "react";
+import React, { lazy, useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import {
   AlignLeft,
@@ -12,15 +12,14 @@ import {
 import VocalTypeLogo from "./icons/VocalTypeLogo";
 import { MachineStatusBar } from "./MachineStatusBar";
 import { useSettings } from "../hooks/useSettings";
-import {
-  GeneralSettings,
-  AdvancedSettings,
-  HistorySettings,
-  DebugSettings,
-  AboutSettings,
-  PostProcessingSettings,
-  ModelsSettings,
-} from "./settings";
+
+const GeneralSettings = lazy(() => import("./settings/general/GeneralSettings").then(m => ({ default: m.GeneralSettings })));
+const ModelsSettings = lazy(() => import("./settings/models/ModelsSettings").then(m => ({ default: m.ModelsSettings })));
+const AdvancedSettings = lazy(() => import("./settings/advanced/AdvancedSettings").then(m => ({ default: m.AdvancedSettings })));
+const PostProcessingSettings = lazy(() => import("./settings/post-processing/PostProcessingSettings").then(m => ({ default: m.PostProcessingSettings })));
+const HistorySettings = lazy(() => import("./settings/history/HistorySettings").then(m => ({ default: m.HistorySettings })));
+const DebugSettings = lazy(() => import("./settings/debug/DebugSettings").then(m => ({ default: m.DebugSettings })));
+const AboutSettings = lazy(() => import("./settings/about/AboutSettings").then(m => ({ default: m.AboutSettings })));
 
 export type SidebarSection = keyof typeof SECTIONS_CONFIG;
 
@@ -96,9 +95,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const { t } = useTranslation();
   const { settings } = useSettings();
 
-  const availableSections = Object.entries(SECTIONS_CONFIG)
-    .filter(([_, config]) => config.enabled(settings))
-    .map(([id, config]) => ({ id: id as SidebarSection, ...config }));
+  const availableSections = useMemo(
+    () =>
+      Object.entries(SECTIONS_CONFIG)
+        .filter(([_, config]) => config.enabled(settings))
+        .map(([id, config]) => ({ id: id as SidebarSection, ...config })),
+    [settings],
+  );
 
   return (
     <aside style={{ width: 210, flexShrink: 0, height: "100%", overflow: "hidden", background: "#141414", borderRight: "0.5px solid rgba(255,255,255,0.08)", display: "flex", flexDirection: "column" }}>
