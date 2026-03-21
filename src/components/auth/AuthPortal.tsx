@@ -27,8 +27,7 @@ interface AuthPortalProps {
 type Mode = "login" | "register" | "forgot";
 type ForgotStep = "email" | "code" | "done";
 
-/** Keywords in server error messages that indicate a duplicate email. */
-const EMAIL_EXISTS_PATTERNS = [
+const emailExistsPatterns = [
   "already exists",
   "already registered",
   "already in use",
@@ -40,57 +39,47 @@ const EMAIL_EXISTS_PATTERNS = [
   "existe déjà",
 ];
 
-/**
- * Keywords in server error messages that indicate this device already has an account.
- * The backend is the authority for device registration enforcement (via device_registrations table).
- * The frontend deviceAlreadyRegistered flag is a UX hint only — not a security gate.
- */
-const DEVICE_EXISTS_PATTERNS = [
+const deviceExistsPatterns = [
   "existe déjà sur cet appareil",
   "device already registered",
   "account already exists on this device",
   "un compte existe",
 ];
 
-const looksLikeEmailExists = (message: string) => {
-  const lower = message.toLowerCase();
-  return EMAIL_EXISTS_PATTERNS.some((p) => lower.includes(p));
-};
+const labelClass =
+  "text-[11px] font-semibold uppercase tracking-[0.18em] text-text/60";
+const inputClass =
+  "w-full rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3.5 text-[14px] text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60 focus:bg-white/[0.06]";
 
-const looksLikeDeviceExists = (message: string) => {
+const hasPattern = (message: string, patterns: string[]) => {
   const lower = message.toLowerCase();
-  return DEVICE_EXISTS_PATTERNS.some((p) => lower.includes(p));
+  return patterns.some((pattern) => lower.includes(pattern));
 };
 
 const formatAccessLabel = (
   session: AuthSession,
-  translate: (key: string, opts?: Record<string, unknown>) => string,
+  t: (key: string, opts?: Record<string, unknown>) => string,
 ) => {
-  if (session.subscription.status === "active") {
-    return translate("auth.access.active");
-  }
-
+  if (session.subscription.status === "active") return t("auth.access.active");
   if (session.subscription.status === "trialing") {
     if (!session.subscription.trial_ends_at) {
-      return translate("auth.access.trialActive");
+      return t("auth.access.trialActive");
     }
-
-    const trialEnd = new Date(session.subscription.trial_ends_at);
     const diff = Math.max(
       0,
-      Math.ceil((trialEnd.getTime() - Date.now()) / (1000 * 60 * 60 * 24)),
+      Math.ceil(
+        (new Date(session.subscription.trial_ends_at).getTime() - Date.now()) /
+          (1000 * 60 * 60 * 24),
+      ),
     );
-
     return diff <= 1
-      ? translate("auth.access.trialEndsToday")
-      : translate("auth.access.trialDaysLeft", { count: diff });
+      ? t("auth.access.trialEndsToday")
+      : t("auth.access.trialDaysLeft", { count: diff });
   }
-
   if (session.subscription.status === "canceled") {
-    return translate("auth.access.canceled");
+    return t("auth.access.canceled");
   }
-
-  return translate("auth.access.trialEnded");
+  return t("auth.access.trialEnded");
 };
 
 export const AuthPortal = ({
@@ -110,28 +99,22 @@ export const AuthPortal = ({
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [billingBusy, setBillingBusy] = useState(false);
   const [deviceAlreadyRegistered, setDeviceAlreadyRegistered] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-
-  // Forgot password flow state
+  const [billingBusy, setBillingBusy] = useState(false);
   const [forgotStep, setForgotStep] = useState<ForgotStep>("email");
   const [forgotBusy, setForgotBusy] = useState(false);
   const [forgotCode, setForgotCode] = useState("");
   const [forgotNewPwd, setForgotNewPwd] = useState("");
   const [forgotConfirmPwd, setForgotConfirmPwd] = useState("");
   const [forgotError, setForgotError] = useState<string | null>(null);
-
-  // Change password state (account view)
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [oldPwd, setOldPwd] = useState("");
   const [newPwd, setNewPwd] = useState("");
   const [confirmPwd, setConfirmPwd] = useState("");
   const [changePwdBusy, setChangePwdBusy] = useState(false);
   const [changePwdError, setChangePwdError] = useState<string | null>(null);
-  const [changePwdSuccess, setChangePwdSuccess] = useState(false);
 
-  // Check on mount if this device already has an account
   useEffect(() => {
     authClient.isDeviceRegistered().then((registered) => {
       if (registered) {
@@ -141,99 +124,65 @@ export const AuthPortal = ({
     });
   }, []);
 
-  // If the server error looks like a duplicate email, switch to login automatically
   useEffect(() => {
-    if (error && mode === "register" && looksLikeEmailExists(error)) {
+    if (error && mode === "register" && hasPattern(error, emailExistsPatterns)) {
       setMode("login");
     }
-  }, [error, mode]);
-
-  // If the backend rejects because this device already has an account, switch to login
-  // This is the authoritative check — the backend enforces device uniqueness server-side
-  useEffect(() => {
-    if (error && mode === "register" && looksLikeDeviceExists(error)) {
+    if (error && mode === "register" && hasPattern(error, deviceExistsPatterns)) {
       setDeviceAlreadyRegistered(true);
       setMode("login");
     }
   }, [error, mode]);
 
+  const hasAccess = session?.subscription.has_access ?? false;
   const accessLabel = useMemo(
-    () =>
-      session
-        ? formatAccessLabel(session, (key, opts) => t(key, opts) as string)
-        : null,
+    () => (session ? formatAccessLabel(session, t as any) : null),
     [session, t],
   );
-
-  const hasAccess = session?.subscription.has_access ?? false;
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setLocalError(null);
-
     if (mode === "register") {
-      // Block if this device already registered an account
       if (deviceAlreadyRegistered) {
         setLocalError(t("auth.errors.deviceAlreadyRegistered"));
         return;
       }
-      // Block if this exact email was already registered on this device
-      const emailUsedBefore = await authClient.isEmailRegisteredOnDevice(email);
-      if (emailUsedBefore) {
+      if (await authClient.isEmailRegisteredOnDevice(email)) {
         setMode("login");
         setLocalError(t("auth.errors.emailExistsSwitchedToLogin"));
         return;
       }
     }
-
     const payload: AuthPayload = {
       email: email.trim(),
       password,
       ...(mode === "register" && name.trim() ? { name: name.trim() } : {}),
     };
-
-    if (mode === "register") {
-      await onRegister(payload);
-      return;
-    }
-
-    await onLogin(payload);
+    if (mode === "register") return onRegister(payload);
+    return onLogin(payload);
   };
 
-  const openBillingLink = async (
-    action: () => Promise<string>,
-    next?: () => Promise<void>,
-  ) => {
+  const displayError = localError
+    ? localError
+    : error && !hasPattern(error, deviceExistsPatterns)
+      ? hasPattern(error, emailExistsPatterns) && mode === "login"
+        ? t("auth.errors.emailExistsSwitchedToLogin")
+        : error
+      : null;
+
+  const openBillingLink = async (action: () => Promise<string>, refresh?: boolean) => {
     setBillingBusy(true);
     try {
       const url = await action();
       await openUrl(url);
-      if (next) {
-        await next();
-      }
+      if (refresh) await onRefreshSession();
     } finally {
       setBillingBusy(false);
     }
   };
 
-  // Determine the error message to display (local errors take priority)
-  const displayError = useMemo(() => {
-    if (localError) return localError;
-    if (!error) return null;
-    // If the server error looks like a duplicate email, show a specific hint
-    if (mode === "login" && looksLikeEmailExists(error)) {
-      return t("auth.errors.emailExistsSwitchedToLogin");
-    }
-    // Device-duplicate errors are handled by switching to login + showing the banner
-    if (looksLikeDeviceExists(error)) return null;
-    return error;
-  }, [localError, error, mode, t]);
-
-  // ── Forgot password handlers ─────────────────────────────────────────────
-
-  const handleForgotSendCode = async (
-    event: React.FormEvent<HTMLFormElement>,
-  ) => {
+  const handleForgotSendCode = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setForgotError(null);
     setForgotBusy(true);
@@ -250,12 +199,10 @@ export const AuthPortal = ({
   const handleForgotReset = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setForgotError(null);
-
     if (forgotNewPwd !== forgotConfirmPwd) {
       setForgotError(t("auth.errors.passwordsDoNotMatch"));
       return;
     }
-
     setForgotBusy(true);
     try {
       const newSession = await authClient.resetPassword({
@@ -274,45 +221,26 @@ export const AuthPortal = ({
       }, 2000);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (
+      setForgotError(
         message.toLowerCase().includes("invalide") ||
-        message.toLowerCase().includes("expired") ||
-        message.toLowerCase().includes("expiré")
-      ) {
-        setForgotError(t("auth.errors.invalidResetCode"));
-      } else {
-        setForgotError(message || t("auth.errors.networkError"));
-      }
+          message.toLowerCase().includes("expired") ||
+          message.toLowerCase().includes("expiré")
+          ? t("auth.errors.invalidResetCode")
+          : message || t("auth.errors.networkError"),
+      );
     } finally {
       setForgotBusy(false);
     }
   };
 
-  const handleBackToLogin = () => {
-    setMode("login");
-    setForgotStep("email");
-    setForgotCode("");
-    setForgotNewPwd("");
-    setForgotConfirmPwd("");
-    setForgotError(null);
-  };
-
-  // ── Change password handler ──────────────────────────────────────────────
-
-  const handleChangePassword = async (
-    event: React.FormEvent<HTMLFormElement>,
-  ) => {
+  const handleChangePassword = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setChangePwdError(null);
-    setChangePwdSuccess(false);
-
     if (newPwd !== confirmPwd) {
       setChangePwdError(t("auth.errors.passwordsDoNotMatch"));
       return;
     }
-
     if (!session) return;
-
     setChangePwdBusy(true);
     try {
       const payload: ChangePasswordPayload = {
@@ -320,25 +248,20 @@ export const AuthPortal = ({
         new_password: newPwd,
       };
       await authClient.changePassword(session.token, payload);
-      setChangePwdSuccess(true);
+      setShowChangePassword(false);
       setOldPwd("");
       setNewPwd("");
       setConfirmPwd("");
-      setShowChangePassword(false);
-      window.setTimeout(() => {
-        onLogout();
-      }, 1500);
+      setTimeout(() => onLogout(), 1500);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      if (
+      setChangePwdError(
         message.toLowerCase().includes("actuel") ||
-        message.toLowerCase().includes("incorrect") ||
-        message.toLowerCase().includes("wrong")
-      ) {
-        setChangePwdError(t("auth.errors.wrongOldPassword"));
-      } else {
-        setChangePwdError(message || t("auth.errors.networkError"));
-      }
+          message.toLowerCase().includes("incorrect") ||
+          message.toLowerCase().includes("wrong")
+          ? t("auth.errors.wrongOldPassword")
+          : message || t("auth.errors.networkError"),
+      );
     } finally {
       setChangePwdBusy(false);
     }
@@ -347,510 +270,117 @@ export const AuthPortal = ({
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(201,168,76,0.18),_transparent_36%),linear-gradient(180deg,_#120f0b_0%,_#090909_45%,_#050505_100%)] text-text">
       <div className="mx-auto flex min-h-screen max-w-6xl flex-col justify-center gap-8 px-6 py-10">
-        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <section className="rounded-[28px] border border-logo-primary/20 bg-background-ui/70 p-8 shadow-[0_30px_80px_rgba(0,0,0,0.35)] backdrop-blur">
+        <div className="grid gap-6 lg:grid-cols-[0.98fr_1.02fr]">
+          <section className="rounded-[28px] border border-white/8 bg-background-ui/72 p-8 shadow-[0_30px_80px_rgba(0,0,0,0.35)] backdrop-blur">
             <div className="mb-10 flex items-center justify-between gap-4">
               <VocalTypeLogo width={180} />
               <div className="rounded-full border border-logo-primary/20 bg-logo-primary/10 px-4 py-2 text-xs font-semibold text-logo-primary">
                 {t("auth.trialBadge")}
               </div>
             </div>
-
             <div className="space-y-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-logo-primary/80">
-                {t("auth.paidAccess")}
-              </p>
-              <h1 className="max-w-xl text-5xl font-black leading-none tracking-[-0.04em] text-text">
-                {t("auth.headline")}
-              </h1>
-              <p className="max-w-xl text-base leading-7 text-text/68">
-                {t("auth.subheadline")}
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-[0.28em] text-logo-primary/80">{t("auth.paidAccess")}</p>
+              <h1 className="max-w-xl text-[42px] font-black leading-[0.95] tracking-[-0.04em] text-text xl:text-5xl">{t("auth.headline")}</h1>
+              <p className="max-w-xl text-[15px] leading-7 text-text/68">{t("auth.subheadline")}</p>
             </div>
-
             <div className="mt-10 grid gap-4 md:grid-cols-3">
-              <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
-                <Sparkles className="mb-3 h-5 w-5 text-logo-primary" />
-                <h2 className="mb-2 text-sm font-semibold">
-                  {t("auth.features.trial.title")}
-                </h2>
-                <p className="text-sm leading-6 text-text/62">
-                  {t("auth.features.trial.description")}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
-                <ShieldCheck className="mb-3 h-5 w-5 text-logo-primary" />
-                <h2 className="mb-2 text-sm font-semibold">
-                  {t("auth.features.subscription.title")}
-                </h2>
-                <p className="text-sm leading-6 text-text/62">
-                  {t("auth.features.subscription.description")}
-                </p>
-              </div>
-              <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
-                <LockKeyhole className="mb-3 h-5 w-5 text-logo-primary" />
-                <h2 className="mb-2 text-sm font-semibold">
-                  {t("auth.features.billing.title")}
-                </h2>
-                <p className="text-sm leading-6 text-text/62">
-                  {t("auth.features.billing.description")}
-                </p>
-              </div>
+              {[
+                { icon: Sparkles, title: t("auth.features.trial.title"), description: t("auth.features.trial.description") },
+                { icon: ShieldCheck, title: t("auth.features.subscription.title"), description: t("auth.features.subscription.description") },
+                { icon: LockKeyhole, title: t("auth.features.billing.title"), description: t("auth.features.billing.description") },
+              ].map((item) => (
+                <div key={item.title} className="rounded-2xl border border-white/8 bg-white/4 p-4">
+                  <item.icon className="mb-3 h-5 w-5 text-logo-primary" />
+                  <h2 className="mb-2 text-sm font-semibold">{item.title}</h2>
+                  <p className="text-sm leading-6 text-text/62">{item.description}</p>
+                </div>
+              ))}
             </div>
           </section>
 
-          <section className="rounded-[28px] border border-white/8 bg-[#121212]/92 p-6 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-            {mode !== "forgot" && (
+          <section className="rounded-[28px] border border-logo-primary/18 bg-[#121212]/92 p-7 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
+            {!session && mode !== "forgot" && (
               <div className="mb-6 flex rounded-full bg-white/5 p-1 text-sm">
-                <button
-                  className={`flex-1 rounded-full px-4 py-2 transition ${
-                    mode === "register"
-                      ? "bg-logo-primary text-black"
-                      : "text-text/65"
-                  }`}
-                  disabled={deviceAlreadyRegistered}
-                  onClick={() => setMode("register")}
-                  type="button"
-                >
-                  {t("auth.createAccount")}
-                </button>
-                <button
-                  className={`flex-1 rounded-full px-4 py-2 transition ${
-                    mode === "login"
-                      ? "bg-logo-primary text-black"
-                      : "text-text/65"
-                  }`}
-                  onClick={() => setMode("login")}
-                  type="button"
-                >
-                  {t("auth.login")}
-                </button>
+                <button className={`flex-1 rounded-full px-4 py-2.5 font-medium transition ${mode === "register" ? "bg-logo-primary text-black shadow-[0_10px_30px_rgba(201,168,76,0.2)]" : "text-text/65 hover:text-text/82"}`} disabled={deviceAlreadyRegistered} onClick={() => setMode("register")} type="button">{t("auth.createAccount")}</button>
+                <button className={`flex-1 rounded-full px-4 py-2.5 font-medium transition ${mode === "login" ? "bg-logo-primary text-black shadow-[0_10px_30px_rgba(201,168,76,0.2)]" : "text-text/65 hover:text-text/82"}`} onClick={() => setMode("login")} type="button">{t("auth.login")}</button>
               </div>
             )}
 
-            {/* Device already registered notice */}
-            {deviceAlreadyRegistered && mode === "login" && (
-              <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-                {t("auth.errors.deviceAlreadyRegistered")}
-              </div>
-            )}
+            {deviceAlreadyRegistered && !session && mode === "login" && <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">{t("auth.errors.deviceAlreadyRegistered")}</div>}
 
             {session ? (
               <div className="space-y-5">
                 <div className="rounded-2xl border border-logo-primary/20 bg-logo-primary/8 p-5">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-logo-primary">
-                        {t("auth.account")}
-                      </p>
-                      <h2 className="mt-2 text-xl font-semibold text-text">
-                        {session.user.email}
-                      </h2>
+                      <p className="text-xs font-semibold uppercase tracking-[0.24em] text-logo-primary">{t("auth.account")}</p>
+                      <h2 className="mt-2 text-xl font-semibold text-text">{session.user.email}</h2>
                       <p className="mt-2 text-sm text-text/65">{accessLabel}</p>
                     </div>
-                    <div
-                      className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                        hasAccess
-                          ? "bg-emerald-500/20 text-emerald-300"
-                          : "bg-amber-500/20 text-amber-300"
-                      }`}
-                    >
-                      {hasAccess ? t("auth.unlocked") : t("auth.locked")}
-                    </div>
+                    <div className={`rounded-full px-3 py-1 text-xs font-semibold ${hasAccess ? "bg-emerald-500/20 text-emerald-300" : "bg-amber-500/20 text-amber-300"}`}>{hasAccess ? t("auth.unlocked") : t("auth.locked")}</div>
                   </div>
                 </div>
-
                 {!hasAccess ? (
-                  <Button
-                    className="w-full justify-center py-3 text-sm"
-                    disabled={billingBusy}
-                    onClick={() =>
-                      openBillingLink(onStartCheckout, onRefreshSession)
-                    }
-                    size="lg"
-                  >
-                    {billingBusy ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : null}
-                    {t("auth.subscribeNow")}
-                  </Button>
+                  <Button className="w-full justify-center py-3 text-sm" disabled={billingBusy} onClick={() => openBillingLink(onStartCheckout, true)} size="lg">{billingBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{t("auth.subscribeNow")}</Button>
                 ) : (
-                  <Button
-                    className="w-full justify-center py-3 text-sm"
-                    disabled={billingBusy}
-                    onClick={() =>
-                      openBillingLink(onOpenBillingPortal, undefined)
-                    }
-                    size="lg"
-                    variant="secondary"
-                  >
-                    {billingBusy ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : null}
-                    {t("auth.manageSubscription")}
-                  </Button>
+                  <Button className="w-full justify-center py-3 text-sm" disabled={billingBusy} onClick={() => openBillingLink(onOpenBillingPortal)} size="lg" variant="secondary">{billingBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{t("auth.manageSubscription")}</Button>
                 )}
-
-                {/* Change password section */}
                 <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
-                  <button
-                    className="w-full text-left text-sm font-semibold text-text/80 hover:text-text transition"
-                    onClick={() => {
-                      setShowChangePassword((prev) => !prev);
-                      setChangePwdError(null);
-                      setChangePwdSuccess(false);
-                      setOldPwd("");
-                      setNewPwd("");
-                      setConfirmPwd("");
-                    }}
-                    type="button"
-                  >
-                    {t("auth.changePassword")}
-                  </button>
-
+                  <button className="w-full text-left text-sm font-semibold text-text/80 transition hover:text-text" onClick={() => setShowChangePassword((prev) => !prev)} type="button">{t("auth.changePassword")}</button>
                   {showChangePassword && (
-                    <form
-                      className="mt-4 space-y-3"
-                      onSubmit={handleChangePassword}
-                    >
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="change-old-pwd"
-                          className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
-                        >
-                          {t("auth.oldPassword")}
-                        </label>
-                        <input
-                          id="change-old-pwd"
-                          autoComplete="current-password"
-                          className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
-                          onChange={(e) => setOldPwd(e.target.value)}
-                          placeholder="••••••"
-                          required
-                          type="password"
-                          value={oldPwd}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="change-new-pwd"
-                          className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
-                        >
-                          {t("auth.newPassword")}
-                        </label>
-                        <input
-                          id="change-new-pwd"
-                          autoComplete="new-password"
-                          className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
-                          onChange={(e) => setNewPwd(e.target.value)}
-                          placeholder="••••••"
-                          required
-                          type="password"
-                          value={newPwd}
-                        />
-                      </div>
-                      <div className="space-y-1">
-                        <label
-                          htmlFor="change-confirm-pwd"
-                          className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
-                        >
-                          {t("auth.confirmPassword")}
-                        </label>
-                        <input
-                          id="change-confirm-pwd"
-                          autoComplete="new-password"
-                          className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
-                          onChange={(e) => setConfirmPwd(e.target.value)}
-                          placeholder="••••••"
-                          required
-                          type="password"
-                          value={confirmPwd}
-                        />
-                      </div>
-
-                      {changePwdError && (
-                        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                          {changePwdError}
-                        </div>
-                      )}
-                      {changePwdSuccess && (
-                        <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200">
-                          {t("auth.passwordChanged")}
-                        </div>
-                      )}
-
-                      <Button
-                        className="w-full justify-center py-2 text-sm"
-                        disabled={changePwdBusy}
-                        size="lg"
-                        type="submit"
-                      >
-                        {changePwdBusy ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : null}
-                        {t("auth.changePassword")}
-                      </Button>
+                    <form className="mt-4 space-y-3" onSubmit={handleChangePassword}>
+                      <label className={labelClass}>{t("auth.oldPassword")}</label>
+                      <input className={inputClass} value={oldPwd} onChange={(e) => setOldPwd(e.target.value)} type="password" placeholder="••••••" />
+                      <label className={labelClass}>{t("auth.newPassword")}</label>
+                      <input className={inputClass} value={newPwd} onChange={(e) => setNewPwd(e.target.value)} type="password" placeholder="••••••" />
+                      <label className={labelClass}>{t("auth.confirmPassword")}</label>
+                      <input className={inputClass} value={confirmPwd} onChange={(e) => setConfirmPwd(e.target.value)} type="password" placeholder="••••••" />
+                      {changePwdError && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{changePwdError}</div>}
+                      <Button className="w-full justify-center py-2 text-sm" disabled={changePwdBusy} size="lg" type="submit">{changePwdBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{t("auth.changePassword")}</Button>
                     </form>
                   )}
                 </div>
-
                 <div className="flex gap-3">
-                  <Button
-                    className="flex-1 justify-center"
-                    onClick={onRefreshSession}
-                    variant="ghost"
-                  >
-                    {t("auth.refreshAccess")}
-                  </Button>
-                  <Button
-                    className="flex-1 justify-center"
-                    onClick={onLogout}
-                    variant="ghost"
-                  >
-                    {t("auth.logout")}
-                  </Button>
+                  <Button className="flex-1 justify-center" onClick={onRefreshSession} variant="ghost">{t("auth.refreshAccess")}</Button>
+                  <Button className="flex-1 justify-center" onClick={onLogout} variant="ghost">{t("auth.logout")}</Button>
                 </div>
               </div>
             ) : mode === "forgot" ? (
               <div className="space-y-4">
-                {forgotStep === "done" ? (
-                  <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-6 text-center text-sm text-emerald-200">
-                    {t("auth.passwordResetSuccess")}
-                  </div>
-                ) : forgotStep === "email" ? (
+                {forgotStep === "done" ? <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-6 text-center text-sm text-emerald-200">{t("auth.passwordResetSuccess")}</div> : forgotStep === "email" ? (
                   <form className="space-y-4" onSubmit={handleForgotSendCode}>
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="forgot-email"
-                        className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
-                      >
-                        {t("auth.fields.email")}
-                      </label>
-                      <input
-                        id="forgot-email"
-                        autoComplete="email"
-                        className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
-                        onChange={(e) => setEmail(e.target.value)}
-                        placeholder={t("auth.fields.emailPlaceholder")}
-                        required
-                        type="email"
-                        value={email}
-                      />
-                    </div>
-
-                    {forgotError && (
-                      <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                        {forgotError}
-                      </div>
-                    )}
-
-                    <Button
-                      className="w-full justify-center py-3 text-sm"
-                      disabled={forgotBusy}
-                      size="lg"
-                      type="submit"
-                    >
-                      {forgotBusy ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : null}
-                      {t("auth.sendCode")}
-                    </Button>
-
-                    <button
-                      className="w-full text-center text-xs text-text/45 hover:text-text/70 transition"
-                      onClick={handleBackToLogin}
-                      type="button"
-                    >
-                      {t("auth.backToLogin")}
-                    </button>
+                    <label className={labelClass}>{t("auth.fields.email")}</label>
+                    <input className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder={t("auth.fields.emailPlaceholder")} />
+                    {forgotError && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{forgotError}</div>}
+                    <Button className="w-full justify-center py-3 text-sm" disabled={forgotBusy} size="lg" type="submit">{forgotBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{t("auth.sendCode")}</Button>
+                    <button className="w-full text-center text-[13px] text-text/45 transition hover:text-text/70" onClick={handleBackToLogin} type="button">{t("auth.backToLogin")}</button>
                   </form>
                 ) : (
                   <form className="space-y-4" onSubmit={handleForgotReset}>
-                    <p className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-text/75">
-                      {t("auth.codeSent")}
-                    </p>
-
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="forgot-code"
-                        className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
-                      >
-                        {t("auth.verificationCode")}
-                      </label>
-                      <input
-                        id="forgot-code"
-                        className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
-                        inputMode="numeric"
-                        maxLength={6}
-                        onChange={(e) => setForgotCode(e.target.value)}
-                        placeholder={t("auth.verificationCodePlaceholder")}
-                        required
-                        value={forgotCode}
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="forgot-new-pwd"
-                        className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
-                      >
-                        {t("auth.newPassword")}
-                      </label>
-                      <input
-                        id="forgot-new-pwd"
-                        autoComplete="new-password"
-                        className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
-                        onChange={(e) => setForgotNewPwd(e.target.value)}
-                        placeholder={t("auth.fields.passwordPlaceholder")}
-                        required
-                        type="password"
-                        value={forgotNewPwd}
-                      />
-                    </div>
-
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="forgot-confirm-pwd"
-                        className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
-                      >
-                        {t("auth.confirmPassword")}
-                      </label>
-                      <input
-                        id="forgot-confirm-pwd"
-                        autoComplete="new-password"
-                        className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
-                        onChange={(e) => setForgotConfirmPwd(e.target.value)}
-                        placeholder={t("auth.fields.passwordPlaceholder")}
-                        required
-                        type="password"
-                        value={forgotConfirmPwd}
-                      />
-                    </div>
-
-                    {forgotError && (
-                      <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                        {forgotError}
-                      </div>
-                    )}
-
-                    <Button
-                      className="w-full justify-center py-3 text-sm"
-                      disabled={forgotBusy}
-                      size="lg"
-                      type="submit"
-                    >
-                      {forgotBusy ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : null}
-                      {t("auth.resetPassword")}
-                    </Button>
-
-                    <button
-                      className="w-full text-center text-xs text-text/45 hover:text-text/70 transition"
-                      onClick={handleBackToLogin}
-                      type="button"
-                    >
-                      {t("auth.backToLogin")}
-                    </button>
+                    <p className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-text/75">{t("auth.codeSent")}</p>
+                    <label className={labelClass}>{t("auth.verificationCode")}</label>
+                    <input className={inputClass} value={forgotCode} onChange={(e) => setForgotCode(e.target.value)} />
+                    <label className={labelClass}>{t("auth.newPassword")}</label>
+                    <input className={inputClass} value={forgotNewPwd} onChange={(e) => setForgotNewPwd(e.target.value)} type="password" />
+                    <label className={labelClass}>{t("auth.confirmPassword")}</label>
+                    <input className={inputClass} value={forgotConfirmPwd} onChange={(e) => setForgotConfirmPwd(e.target.value)} type="password" />
+                    {forgotError && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{forgotError}</div>}
+                    <Button className="w-full justify-center py-3 text-sm" disabled={forgotBusy} size="lg" type="submit">{forgotBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{t("auth.resetPassword")}</Button>
+                    <button className="w-full text-center text-[13px] text-text/45 transition hover:text-text/70" onClick={handleBackToLogin} type="button">{t("auth.backToLogin")}</button>
                   </form>
                 )}
               </div>
             ) : (
               <form className="space-y-4" onSubmit={handleSubmit}>
-                {mode === "register" ? (
-                  <div className="space-y-1">
-                    <label
-                      htmlFor="auth-name"
-                      className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
-                    >
-                      {t("auth.fields.name")}
-                    </label>
-                    <input
-                      id="auth-name"
-                      className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
-                      onChange={(event) => setName(event.target.value)}
-                      placeholder={t("auth.fields.namePlaceholder")}
-                      value={name}
-                    />
-                  </div>
-                ) : null}
-
-                <div className="space-y-1">
-                  <label
-                    htmlFor="auth-email"
-                    className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
-                  >
-                    {t("auth.fields.email")}
-                  </label>
-                  <input
-                    id="auth-email"
-                    autoComplete="email"
-                    className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
-                    onChange={(event) => setEmail(event.target.value)}
-                    placeholder={t("auth.fields.emailPlaceholder")}
-                    required
-                    type="email"
-                    value={email}
-                  />
-                </div>
-
-                <div className="space-y-1">
-                  <label
-                    htmlFor="auth-password"
-                    className="text-xs font-semibold uppercase tracking-[0.22em] text-text/55"
-                  >
-                    {t("auth.fields.password")}
-                  </label>
-                  <input
-                    id="auth-password"
-                    autoComplete={
-                      mode === "register" ? "new-password" : "current-password"
-                    }
-                    className="w-full rounded-2xl border border-white/10 bg-white/4 px-4 py-3 text-sm text-text outline-none transition placeholder:text-text/30 focus:border-logo-primary/60"
-                    onChange={(event) => setPassword(event.target.value)}
-                    placeholder={t("auth.fields.passwordPlaceholder")}
-                    required
-                    type="password"
-                    value={password}
-                  />
-                  {mode === "login" && (
-                    <button
-                      className="mt-1 text-xs text-text/45 hover:text-text/70 transition"
-                      onClick={() => {
-                        setMode("forgot");
-                        setForgotStep("email");
-                        setForgotError(null);
-                      }}
-                      type="button"
-                    >
-                      {t("auth.forgotPassword")}
-                    </button>
-                  )}
-                </div>
-
-                {displayError ? (
-                  <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-                    {displayError}
-                  </div>
-                ) : null}
-
-                <Button
-                  className="w-full justify-center py-3 text-sm"
-                  disabled={isLoading || isSubmitting}
-                  size="lg"
-                  type="submit"
-                >
-                  {isLoading || isSubmitting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : null}
-                  {mode === "register"
-                    ? t("auth.createAccount")
-                    : t("auth.loginToAccount")}
-                </Button>
-
-                <p className="text-center text-xs leading-6 text-text/45">
-                  {t("auth.trialNote")}
-                </p>
+                {mode === "register" && (<><label className={labelClass}>{t("auth.fields.name")}</label><input className={inputClass} value={name} onChange={(e) => setName(e.target.value)} placeholder={t("auth.fields.namePlaceholder")} /></>)}
+                <label className={labelClass}>{t("auth.fields.email")}</label>
+                <input className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder={t("auth.fields.emailPlaceholder")} />
+                <label className={labelClass}>{t("auth.fields.password")}</label>
+                <input className={inputClass} value={password} onChange={(e) => setPassword(e.target.value)} type="password" placeholder={t("auth.fields.passwordPlaceholder")} />
+                {mode === "login" && <button className="mt-1 text-[13px] text-text/45 transition hover:text-text/70" onClick={() => setMode("forgot")} type="button">{t("auth.forgotPassword")}</button>}
+                {displayError && <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{displayError}</div>}
+                <Button className="w-full justify-center py-3 text-sm" disabled={isLoading || isSubmitting} size="lg" type="submit">{isLoading || isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}{mode === "register" ? t("auth.createAccount") : t("auth.loginToAccount")}</Button>
+                <p className="text-center text-[13px] leading-6 text-text/45">{t("auth.trialNote")}</p>
               </form>
             )}
           </section>

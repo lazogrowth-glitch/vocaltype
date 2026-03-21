@@ -74,7 +74,6 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
 
   const isDownloading = selectedModelId !== null;
 
-  // Watch for the selected model to finish downloading + extracting
   useEffect(() => {
     invoke<AdaptiveProfileSnapshot | null>("get_adaptive_runtime_profile")
       .then((profile) => setAdaptiveProfile(profile))
@@ -89,7 +88,6 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
     const stillExtracting = selectedModelId in extractingModels;
 
     if (model?.is_downloaded && !stillDownloading && !stillExtracting) {
-      // Model is ready — select it and transition
       selectModel(selectedModelId).then((success) => {
         if (success) {
           onModelSelected();
@@ -106,6 +104,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
     extractingModels,
     selectModel,
     onModelSelected,
+    t,
   ]);
 
   const handleDownloadModel = async (modelId: string) => {
@@ -124,13 +123,11 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
     return "downloadable";
   };
 
-  const getModelDownloadProgress = (modelId: string): number | undefined => {
-    return downloadProgress[modelId]?.percentage;
-  };
+  const getModelDownloadProgress = (modelId: string): number | undefined =>
+    downloadProgress[modelId]?.percentage;
 
-  const getModelDownloadSpeed = (modelId: string): number | undefined => {
-    return downloadStats[modelId]?.speed;
-  };
+  const getModelDownloadSpeed = (modelId: string): number | undefined =>
+    downloadStats[modelId]?.speed;
 
   const modeCards = (() => {
     const appIsEnglish = i18n.language.startsWith("en");
@@ -145,7 +142,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
         id: "auto",
         title: t("onboarding.mode.auto", { defaultValue: "Auto" }),
         description: t("onboarding.mode.autoDescription", {
-          defaultValue: "Best match for this machine",
+          defaultValue: "Meilleur choix pour cette machine",
         }),
         modelId: adaptiveProfile?.recommended_model_id ?? rapidId,
       },
@@ -154,8 +151,8 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
         title: t("onboarding.mode.fast", { defaultValue: "Rapide" }),
         description: t("onboarding.mode.fastDescription", {
           defaultValue: isCopilotOptimizedParakeet(adaptiveProfile, rapidId)
-            ? "Lowest latency with the NPU path on this PC"
-            : "Lowest latency for quick dictation",
+            ? "Latence minimale avec le chemin NPU de ce PC"
+            : "Le plus rapide pour une dictée fluide",
         }),
         modelId: rapidId,
       },
@@ -165,7 +162,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
           defaultValue: "Équilibré",
         }),
         description: t("onboarding.mode.balancedDescription", {
-          defaultValue: "Better quality without going too heavy",
+          defaultValue: "Un bon compromis entre vitesse et qualité",
         }),
         modelId: balancedId,
       },
@@ -173,7 +170,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
         id: "quality",
         title: t("onboarding.mode.quality", { defaultValue: "Qualité" }),
         description: t("onboarding.mode.qualityDescription", {
-          defaultValue: "Best text quality on stronger machines",
+          defaultValue: "La meilleure qualité de texte sur une machine plus puissante",
         }),
         modelId: qualityId,
       },
@@ -184,27 +181,33 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
   })();
 
   return (
-    <div className="relative h-screen w-screen flex flex-col p-6 gap-4 inset-0">
-      {onBack && (
+    <div className="relative inset-0 flex h-screen w-screen flex-col gap-5 bg-[radial-gradient(circle_at_top,_rgba(201,168,76,0.16),_transparent_30%),linear-gradient(180deg,_#111_0%,_#090909_100%)] p-6">
+      {onBack ? (
         <button
           type="button"
           onClick={onBack}
-          className="absolute top-4 left-4 flex items-center gap-1.5 text-sm text-text/50 hover:text-text/80 transition-colors"
+          className="absolute left-4 top-4 flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.04] px-3 py-1.5 text-[13px] text-text/58 transition-colors hover:bg-white/[0.08] hover:text-text/82"
         >
-          ← {t("common.back")}
+          {t("common.back")}
         </button>
-      )}
-      <div className="flex flex-col items-center gap-2 shrink-0">
+      ) : null}
+
+      <div className="flex shrink-0 flex-col items-center gap-3 pt-2">
         <VocalTypeLogo width={200} />
-        <p className="text-text/70 max-w-md font-medium mx-auto">
-          {t("onboarding.subtitle")}
-        </p>
+        <div className="text-center">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-logo-primary/80">
+            Configuration du modèle
+          </p>
+          <p className="mx-auto mt-2 max-w-2xl text-[15px] leading-7 text-text/70">
+            {t("onboarding.subtitle")}
+          </p>
+        </div>
       </div>
 
-      <div className="max-w-[600px] w-full mx-auto text-center flex-1 flex flex-col min-h-0">
+      <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col overflow-hidden rounded-[28px] border border-white/8 bg-white/[0.03] px-6 py-6 shadow-[0_30px_80px_rgba(0,0,0,0.28)]">
         {(adaptiveProfile?.copilot_plus_detected ||
           adaptiveProfile?.npu_detected) && (
-          <div className="mb-4 rounded-xl border border-logo-primary/25 bg-logo-primary/5 px-4 py-3 text-left">
+          <div className="mb-5 rounded-2xl border border-logo-primary/25 bg-logo-primary/5 px-4 py-3 text-left">
             <p className="text-sm font-semibold text-text">
               {adaptiveProfile?.copilot_plus_detected
                 ? t("onboarding.hardware.copilotPlusTitle", {
@@ -214,7 +217,7 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
                     defaultValue: "NPU detected",
                   })}
             </p>
-            <p className="text-xs text-text/60 mt-1">
+            <p className="mt-1 text-[13px] leading-6 text-text/60">
               {adaptiveProfile?.copilot_plus_detected
                 ? t("onboarding.hardware.copilotPlusDescription", {
                     defaultValue:
@@ -227,7 +230,8 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
             </p>
           </div>
         )}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-4">
+
+        <div className="grid grid-cols-1 gap-3 pb-5 sm:grid-cols-2 xl:grid-cols-4">
           {modeCards.map(({ id, title, description, modelId, model }) => {
             const unavailable = !model;
             return (
@@ -236,20 +240,22 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
                 type="button"
                 disabled={isDownloading || unavailable}
                 onClick={() => handleDownloadModel(modelId)}
-                className="rounded-xl border border-mid-gray/20 bg-mid-gray/5 hover:border-logo-primary/40 hover:bg-logo-primary/5 text-left p-4 transition-all disabled:opacity-50"
+                className="rounded-2xl border border-mid-gray/20 bg-mid-gray/5 p-4 text-left transition-all hover:border-logo-primary/40 hover:bg-logo-primary/5 disabled:opacity-50"
               >
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-semibold text-text">{title}</p>
-                    <p className="text-xs text-text/60 mt-1">{description}</p>
+                    <p className="text-[15px] font-semibold text-text">{title}</p>
+                    <p className="mt-1 text-[13px] leading-6 text-text/60">
+                      {description}
+                    </p>
                   </div>
-                  {id === "auto" && (
+                  {id === "auto" ? (
                     <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-logo-primary">
                       {t("onboarding.recommended")}
                     </span>
-                  )}
+                  ) : null}
                 </div>
-                <p className="text-xs text-text/50 mt-3">
+                <p className="mt-3 text-[12px] text-text/48">
                   {model ? getTranslatedModelName(model, t) : modelId}
                 </p>
               </button>
@@ -257,51 +263,53 @@ const Onboarding: React.FC<OnboardingProps> = ({ onModelSelected, onBack }) => {
           })}
         </div>
 
-        <div className="flex flex-col gap-4 pb-6">
-          {models
-            .filter((m: ModelInfo) => !m.is_downloaded)
-            .filter((model: ModelInfo) => model.is_recommended)
-            .map((model: ModelInfo) => (
-              <ModelCard
-                key={model.id}
-                model={model}
-                variant="featured"
-                status={getModelStatus(model.id)}
-                disabled={isDownloading}
-                onSelect={handleDownloadModel}
-                onDownload={handleDownloadModel}
-                downloadProgress={getModelDownloadProgress(model.id)}
-                downloadSpeed={getModelDownloadSpeed(model.id)}
-                copilotOptimized={isCopilotOptimizedParakeet(
-                  adaptiveProfile,
-                  model.id,
-                )}
-              />
-            ))}
+        <div className="flex-1 overflow-y-auto pr-1">
+          <div className="flex flex-col gap-4 pb-3">
+            {models
+              .filter((m: ModelInfo) => !m.is_downloaded)
+              .filter((model: ModelInfo) => model.is_recommended)
+              .map((model: ModelInfo) => (
+                <ModelCard
+                  key={model.id}
+                  model={model}
+                  variant="featured"
+                  status={getModelStatus(model.id)}
+                  disabled={isDownloading}
+                  onSelect={handleDownloadModel}
+                  onDownload={handleDownloadModel}
+                  downloadProgress={getModelDownloadProgress(model.id)}
+                  downloadSpeed={getModelDownloadSpeed(model.id)}
+                  copilotOptimized={isCopilotOptimizedParakeet(
+                    adaptiveProfile,
+                    model.id,
+                  )}
+                />
+              ))}
 
-          {models
-            .filter((m: ModelInfo) => !m.is_downloaded)
-            .filter((model: ModelInfo) => !model.is_recommended)
-            .sort(
-              (a: ModelInfo, b: ModelInfo) =>
-                getOnboardingRank(b) - getOnboardingRank(a),
-            )
-            .map((model: ModelInfo) => (
-              <ModelCard
-                key={model.id}
-                model={model}
-                status={getModelStatus(model.id)}
-                disabled={isDownloading}
-                onSelect={handleDownloadModel}
-                onDownload={handleDownloadModel}
-                downloadProgress={getModelDownloadProgress(model.id)}
-                downloadSpeed={getModelDownloadSpeed(model.id)}
-                copilotOptimized={isCopilotOptimizedParakeet(
-                  adaptiveProfile,
-                  model.id,
-                )}
-              />
-            ))}
+            {models
+              .filter((m: ModelInfo) => !m.is_downloaded)
+              .filter((model: ModelInfo) => !model.is_recommended)
+              .sort(
+                (a: ModelInfo, b: ModelInfo) =>
+                  getOnboardingRank(b) - getOnboardingRank(a),
+              )
+              .map((model: ModelInfo) => (
+                <ModelCard
+                  key={model.id}
+                  model={model}
+                  status={getModelStatus(model.id)}
+                  disabled={isDownloading}
+                  onSelect={handleDownloadModel}
+                  onDownload={handleDownloadModel}
+                  downloadProgress={getModelDownloadProgress(model.id)}
+                  downloadSpeed={getModelDownloadSpeed(model.id)}
+                  copilotOptimized={isCopilotOptimizedParakeet(
+                    adaptiveProfile,
+                    model.id,
+                  )}
+                />
+              ))}
+          </div>
         </div>
       </div>
     </div>

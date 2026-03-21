@@ -15,13 +15,9 @@ import VocalTypeLogo from "./icons/VocalTypeLogo";
 import { MachineStatusBar } from "./MachineStatusBar";
 import { TranscriptionWarmupBadge } from "./TranscriptionWarmupBadge";
 import { useSettings } from "../hooks/useSettings";
-
 import { usePlan } from "@/lib/subscription/context";
-// GeneralSettings is the default view — keep it eager so there's no flash on startup.
 import { GeneralSettings } from "./settings/general/GeneralSettings";
 
-// All other panels are lazily loaded; they are only rendered when the user
-// navigates to them, reducing the initial JS parse/eval cost.
 const AdvancedSettings = React.lazy(() =>
   import("./settings/advanced/AdvancedSettings").then((m) => ({
     default: m.AdvancedSettings,
@@ -173,7 +169,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   return (
     <aside
       style={{
-        width: 210,
+        width: 224,
         flexShrink: 0,
         height: "100%",
         overflow: "hidden",
@@ -189,7 +185,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {trialBadge && (
+      {trialBadge ? (
         <button
           type="button"
           onClick={() =>
@@ -217,28 +213,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {trialBadge.urgency === "neutral" &&
               t("trial.badge.neutral", {
                 count: trialBadge.days,
-                defaultValue: `Trial Premium · {{count}}j restants`,
+                defaultValue: "Trial Premium · {{count}}j restants",
               })}
             {trialBadge.urgency === "warning" &&
               t("trial.badge.warning", {
                 count: trialBadge.days,
-                defaultValue: `Plus que {{count}} jours de Premium`,
+                defaultValue: "Plus que {{count}} jours de Premium",
               })}
             {trialBadge.urgency === "urgent" &&
               (trialBadge.days === 0
                 ? t("trial.badge.today", {
-                    defaultValue: "⚠ Expire aujourd'hui",
+                    defaultValue: "Expire aujourd'hui",
                   })
                 : t("trial.badge.urgent", {
                     count: trialBadge.days,
-                    defaultValue: `⚠ Expire dans {{count}} jours`,
+                    defaultValue: "Expire dans {{count}} jours",
                   }))}
           </p>
-          <p className="mt-0.5 text-[10px] text-white/30">
-            {t("trial.badge.cta", { defaultValue: "Passer à Premium →" })}
+          <p className="mt-1 text-[11px] text-white/42">
+            {t("trial.badge.cta", { defaultValue: "Passer à Premium" })}
           </p>
         </button>
-      )}
+      ) : null}
 
       <TranscriptionWarmupBadge />
 
@@ -255,8 +251,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 display: "flex",
                 alignItems: "center",
                 gap: 10,
-                padding: "10px 18px",
-                fontSize: 13,
+                padding: "11px 18px",
+                fontSize: 14,
                 width: "100%",
                 cursor: "pointer",
                 transition: "all 0.15s",
@@ -264,7 +260,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   ? "2px solid #c9a84c"
                   : "2px solid transparent",
                 background: isActive ? "rgba(201,168,76,0.12)" : "transparent",
-                color: isActive ? "#fff" : "rgba(255,255,255,0.45)",
+                color: isActive ? "#fff" : "rgba(255,255,255,0.58)",
               }}
               onClick={() => onSectionChange(section.id)}
               aria-current={isActive ? "page" : undefined}
@@ -283,7 +279,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 />
               </span>
               <span
-                className="truncate text-[13px] font-normal leading-5"
+                className="truncate text-[14px] font-medium leading-5"
                 title={t(section.labelKey)}
               >
                 {t(section.labelKey)}
