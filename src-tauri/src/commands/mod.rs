@@ -5,6 +5,7 @@ pub mod cloud_stt;
 pub mod dictionary;
 pub mod gemini;
 pub mod history;
+pub mod meetings;
 pub mod models;
 pub mod notes;
 pub mod snippets;

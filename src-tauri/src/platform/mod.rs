@@ -37,5 +37,6 @@ pub mod clipboard_monitor;
 pub mod input;
 pub mod media_control;
 pub mod overlay;
+pub mod process_monitor;
 pub mod signal_handle;
 pub mod utils;

@@ -55,6 +55,7 @@ use tauri_specta::{collect_commands, Builder};
 use env_filter::Builder as EnvFilterBuilder;
 use managers::audio::AudioRecordingManager;
 use managers::history::HistoryManager;
+use managers::meetings::MeetingManager;
 use managers::model::ModelManager;
 use managers::notes::NoteManager;
 use managers::transcription::TranscriptionManager;
@@ -291,6 +292,10 @@ fn initialize_core_logic(app_handle: &AppHandle) -> Result<(), String> {
         NoteManager::new(app_handle)
             .map_err(|err| format!("Failed to initialize note manager: {}", err))?,
     );
+    let meeting_manager = Arc::new(
+        MeetingManager::new(app_handle)
+            .map_err(|err| format!("Failed to initialize meeting manager: {}", err))?,
+    );
 
     // Add managers to Tauri's managed state
     app_handle.manage(recording_manager.clone());
@@ -299,6 +304,7 @@ fn initialize_core_logic(app_handle: &AppHandle) -> Result<(), String> {
     app_handle.manage(history_manager.clone());
     app_handle.manage(dictionary_manager);
     app_handle.manage(note_manager);
+    app_handle.manage(meeting_manager);
 
     {
         let app_handle = app_handle.clone();
@@ -631,6 +637,13 @@ pub fn run(cli_args: CliArgs) {
         commands::notes::update_note,
         commands::notes::delete_note,
         commands::notes::search_notes,
+        commands::meetings::get_meetings,
+        commands::meetings::create_meeting,
+        commands::meetings::update_meeting,
+        commands::meetings::delete_meeting,
+        commands::meetings::search_meetings,
+        commands::meetings::detect_active_meeting_app,
+        commands::meetings::close_meeting,
         commands::dictionary::get_dictionary,
         commands::dictionary::add_dictionary_entry,
         commands::dictionary::remove_dictionary_entry,

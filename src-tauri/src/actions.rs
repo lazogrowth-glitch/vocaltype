@@ -1,4 +1,5 @@
 mod agent;
+pub mod meeting;
 mod model_selection;
 mod paste;
 mod post_processing;
@@ -116,6 +117,12 @@ pub static ACTION_MAP: Lazy<HashMap<String, Arc<dyn ShortcutAction>>> = Lazy::ne
     );
     map.insert(
         "agent_key".to_string(),
+        Arc::new(TranscribeAction {
+            post_process: false,
+        }) as Arc<dyn ShortcutAction>,
+    );
+    map.insert(
+        "meeting_key".to_string(),
         Arc::new(TranscribeAction {
             post_process: false,
         }) as Arc<dyn ShortcutAction>,

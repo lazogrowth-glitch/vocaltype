@@ -982,6 +982,62 @@ async searchNotes(query: string) : Promise<Result<NoteEntry[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async getMeetings() : Promise<Result<MeetingEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("get_meetings") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async createMeeting(title: string, appName: string) : Promise<Result<MeetingEntry, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("create_meeting", { title, appName }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async updateMeeting(id: number, title: string, transcript: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("update_meeting", { id, title, transcript }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async deleteMeeting(id: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("delete_meeting", { id }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async searchMeetings(query: string) : Promise<Result<MeetingEntry[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("search_meetings", { query }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async detectActiveMeetingApp() : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("detect_active_meeting_app") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async closeMeeting() : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("close_meeting") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async getDictionary() : Promise<Result<DictionaryEntry[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_dictionary") };
@@ -1379,6 +1435,7 @@ export type MachineTier = "low" | "medium" | "high"
 export type ModelInfo = { id: string; name: string; description: string; filename: string; url: string | null; expected_etag: string | null; size_mb: number; is_downloaded: boolean; is_downloading: boolean; partial_size: number; is_directory: boolean; engine_type: EngineType; accuracy_score: number; speed_score: number; supports_translation: boolean; is_recommended: boolean; supported_languages: string[]; is_custom: boolean; requires_license_key: boolean }
 export type ModelLoadStatus = { is_loaded: boolean; current_model: string | null }
 export type ModelUnloadTimeout = "never" | "immediately" | "min_2" | "min_5" | "min_10" | "min_15" | "hour_1" | "sec_5"
+export type MeetingEntry = { id: number; title: string; app_name: string; transcript: string; created_at: number; updated_at: number }
 export type NoteEntry = { id: number; title: string; content: string; created_at: number; updated_at: number }
 export type NpuKind = "none" | "qualcomm" | "intel" | "amd" | "unknown"
 export type OverlayPosition = "none" | "top" | "bottom"

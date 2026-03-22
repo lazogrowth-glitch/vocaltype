@@ -8,6 +8,7 @@ import {
   History,
   Info,
   LayoutGrid,
+  Mic,
   NotebookPen,
   Settings2,
   Zap,
@@ -57,6 +58,11 @@ const SnippetsSettings = React.lazy(() =>
 const NotesSettings = React.lazy(() =>
   import("./settings/notes/NotesSettings").then((m) => ({
     default: m.NotesSettings,
+  })),
+);
+const MeetingsSettings = React.lazy(() =>
+  import("./settings/meetings/MeetingsSettings").then((m) => ({
+    default: m.MeetingsSettings,
   })),
 );
 const StatsSettings = React.lazy(() =>
@@ -111,6 +117,12 @@ export const SECTIONS_CONFIG = {
     labelKey: "sidebar.notes",
     icon: NotebookPen,
     component: NotesSettings,
+    enabled: () => true,
+  },
+  meetings: {
+    labelKey: "sidebar.meetings",
+    icon: Mic,
+    component: MeetingsSettings,
     enabled: () => true,
   },
   history: {

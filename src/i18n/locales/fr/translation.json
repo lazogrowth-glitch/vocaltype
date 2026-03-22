@@ -13,6 +13,7 @@
     "advanced": "Avancé",
     "postProcessing": "Post-traitement",
     "notes": "Notes",
+    "meetings": "Réunions",
     "history": "Historique",
     "snippets": "Snippets",
     "stats": "Statistiques",
@@ -20,7 +21,7 @@
     "about": "À propos"
   },
   "onboarding": {
-    "title": "Configuration du modèle",
+    "title": "Commencer",
     "subtitle": "Pour commencer, choisissez un modèle de transcription",
     "recommended": "Recommandé",
     "download": "Télécharger",
@@ -136,8 +137,7 @@
     },
     "progress": {
       "stepOf": "Étape {{current}} sur {{total}}"
-    },
-    "title": "Commencer"
+    }
   },
   "modelSelector": {
     "badges": {
