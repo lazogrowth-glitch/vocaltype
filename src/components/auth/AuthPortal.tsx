@@ -364,7 +364,7 @@ export const AuthPortal = ({
                   color: "#f6efe4",
                 }}
               >
-                Vocal<span style={{ color: "#C9A84C" }}>Type</span>
+                Vocal<span style={{ color: "#C9A84C" }}>ype</span>
               </div>
               <div
                 style={{

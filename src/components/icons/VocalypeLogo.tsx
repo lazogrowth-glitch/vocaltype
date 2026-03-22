@@ -1,6 +1,6 @@
 const WORDMARK = {
   first: "Vocal",
-  second: "Type",
+  second: "ype",
 };
 
 const VocalypeLogo = ({
