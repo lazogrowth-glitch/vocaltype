@@ -8,12 +8,13 @@
         "label": "main",
         "url": "desktop/index.html",
         "title": "VocalType Dev",
-        "width": 680,
-        "height": 570,
-        "minWidth": 680,
-        "minHeight": 570,
+        "width": 1220,
+        "height": 810,
+        "minWidth": 1220,
+        "minHeight": 810,
         "resizable": true,
         "maximizable": false,
+        "center": true,
         "visible": false
       }
     ]

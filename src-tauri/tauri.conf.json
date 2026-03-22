@@ -16,12 +16,13 @@
         "label": "main",
         "url": "desktop/index.html",
         "title": "VocalType",
-        "width": 800,
-        "height": 560,
-        "minWidth": 800,
-        "minHeight": 560,
+        "width": 1220,
+        "height": 810,
+        "minWidth": 1220,
+        "minHeight": 810,
         "resizable": true,
         "maximizable": false,
+        "center": true,
         "visible": false
       }
     ],
