@@ -20,8 +20,8 @@ import { useAuthFlow } from "@/hooks/useAuthFlow";
 import { useBackendEvents } from "@/hooks/useBackendEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
 
-const AUTH_WINDOW_SIZE = { width: 1220, height: 810 };
-const APP_WINDOW_SIZE = { width: 1220, height: 810 };
+const AUTH_WINDOW_SIZE = { width: 1348, height: 875 };
+const APP_WINDOW_SIZE = { width: 1348, height: 875 };
 
 const renderSettingsContent = (section: SidebarSection) => {
   const ActiveComponent =
@@ -168,7 +168,7 @@ function App() {
     const resizeWindow = async () => {
       try {
         const window = getCurrentWindow();
-        await window.setMinSize(new LogicalSize(1220, 810));
+        await window.setMinSize(new LogicalSize(1348, 875));
         await window.setSize(new LogicalSize(target.width, target.height));
         await window.center();
       } catch (windowError) {
