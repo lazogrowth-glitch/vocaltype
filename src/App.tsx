@@ -314,6 +314,7 @@ function App() {
             overflowX: "hidden",
             padding: "20px 28px 28px",
             minWidth: 0,
+            minHeight: 0,
             background: "#0f0f0f",
           }}
         >

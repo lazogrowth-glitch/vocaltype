@@ -239,7 +239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       <TranscriptionWarmupBadge />
 
-      <div className="flex flex-1 flex-col py-2.5 overflow-y-auto">
+      <div className="flex flex-1 flex-col py-2.5 overflow-y-auto min-h-0">
         {availableSections.map((section) => {
           const Icon = section.icon;
           const isActive = activeSection === section.id;
